@@ -177,7 +177,7 @@ export function extractSecretFromURL(): { secret: string; params?: OTPAuthParams
   if (pathSecret.startsWith('2fa/')) {
     pathSecret = pathSecret.slice(4);
   }
-  if (pathSecret && pathSecret !== '2fa' && pathSecret !== 'mail' && validateBase32(cleanSecret(pathSecret))) {
+  if (pathSecret && pathSecret !== '2fa' && pathSecret !== 'mail' && pathSecret !== 'receive-code' && validateBase32(cleanSecret(pathSecret))) {
     return { secret: cleanSecret(pathSecret) };
   }
 

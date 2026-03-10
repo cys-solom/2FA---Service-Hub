@@ -241,26 +241,7 @@ function TempMailPage() {
         <div className="w-full max-w-2xl">
           <TempMailHeader />
 
-          {/* ── Check Inbox (Public) ───────────────── */}
-          <div className="glass-card p-5 sm:p-6 mb-4 animate-fade-in-up" style={{ animationDelay: '0.1s', opacity: 0 }}>
-            <h2 className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Check Your Inbox</h2>
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  value={checkEmail}
-                  onChange={e => setCheckEmail(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleCheckEmail()}
-                  placeholder={`username@${domain}`}
-                  className="input-field !py-3 text-sm"
-                />
-              </div>
-              <button onClick={() => handleCheckEmail()} disabled={isLoading} className="btn-primary !px-5 !py-3 flex-shrink-0">
-                {isLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Check'}
-              </button>
-            </div>
-            <p className="text-[10px] text-white/15 mt-2">Enter your email address to check for messages</p>
-          </div>
+
 
           {/* ── Create New Email ────────────────────── */}
           <div className="glass-card p-5 sm:p-6 mb-4 animate-fade-in-up" style={{ animationDelay: '0.15s', opacity: 0 }}>
