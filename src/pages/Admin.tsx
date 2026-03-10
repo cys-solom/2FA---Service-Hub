@@ -16,7 +16,7 @@ import {
   toggleDomainActive,
   updateSettings,
 } from '../services/domain-config';
-import { purgeAllFromAPI } from '../services/tempmail-service';
+import { purgeAllFromAPI, cleanupOldFromAPI } from '../services/tempmail-service';
 
 function AdminPage() {
   const [config, setConfig] = useState<AdminConfig>(getAdminConfig());
@@ -278,26 +278,51 @@ function AdminPage() {
               Danger Zone
             </h2>
 
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-white/60 font-medium">Purge all messages</p>
-                <p className="text-[11px] text-white/20 mt-0.5">Delete ALL emails from the IMAP inbox for all temp addresses</p>
+            <div className="space-y-4">
+              {/* Clean old messages */}
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm text-white/60 font-medium">Clean old messages</p>
+                  <p className="text-[11px] text-white/20 mt-0.5">Delete emails older than 30 days from the server</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const count = await cleanupOldFromAPI(30);
+                    addToast(`Cleaned ${count} message(s) older than 30 days`, 'info');
+                  }}
+                  className="btn bg-white/[0.04] text-yellow-300/70 border border-white/[0.06] hover:bg-yellow-500/10 hover:border-yellow-500/20 hover:text-yellow-300 !py-2 !px-4 !text-xs flex-shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Clean 30+ days
+                </button>
               </div>
-              <button
-                onClick={async () => {
-                  if (confirm('Are you sure? This will permanently delete ALL emails from the mail server.')) {
-                    const count = await purgeAllFromAPI();
-                    addToast(`Purged ${count} message(s) from server`, 'info');
-                  }
-                }}
-                className="btn-danger !py-2 !px-4 !text-xs flex-shrink-0"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                Purge All
-              </button>
+
+              <div className="h-px bg-white/[0.04]" />
+
+              {/* Purge all */}
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm text-white/60 font-medium">Purge all messages</p>
+                  <p className="text-[11px] text-white/20 mt-0.5">Delete ALL emails from the IMAP inbox for all temp addresses</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (confirm('Are you sure? This will permanently delete ALL emails from the mail server.')) {
+                      const count = await purgeAllFromAPI();
+                      addToast(`Purged ${count} message(s) from server`, 'info');
+                    }
+                  }}
+                  className="btn-danger !py-2 !px-4 !text-xs flex-shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Purge All
+                </button>
+              </div>
             </div>
           </div>
 

@@ -1,9 +1,12 @@
 /**
  * Service Hub - Temp Mail Page
  *
- * - No expiration — mailboxes persist until manually deleted
- * - Messages filtered by TO address
- * - Delete individual messages or entire mailbox
+ * Features:
+ *   - Random or Custom email prefix
+ *   - No expiration (persistent)
+ *   - Per-message delete
+ *   - Clear all messages for one inbox
+ *   - Auto-cleanup 30-day-old messages
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -18,6 +21,7 @@ import type { ToastData } from '../components/Toast';
 import type { TempMailbox, TempMessage } from '../services/tempmail-service';
 import {
   createMailbox,
+  createCustomMailbox,
   getAllMailboxes,
   refreshInbox,
   getInbox,
@@ -25,7 +29,10 @@ import {
   getUnreadCount,
   deleteMailbox,
   deleteMessage,
+  clearMailboxMessages,
+  triggerAutoCleanup,
 } from '../services/tempmail-service';
+import { getPrimaryDomain } from '../services/domain-config';
 
 function TempMailPage() {
   const [mailbox, setMailbox] = useState<TempMailbox | null>(null);
@@ -36,6 +43,9 @@ function TempMailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [mode, setMode] = useState<'random' | 'custom'>('random');
+  const [customPrefix, setCustomPrefix] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const addToast = useCallback((message: string, type: ToastData['type'] = 'success') => {
@@ -47,11 +57,11 @@ function TempMailPage() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // Load saved mailboxes on mount
+  // Load saved mailboxes + auto-cleanup on mount
   useEffect(() => {
+    triggerAutoCleanup();
     const saved = getAllMailboxes();
     setSavedMailboxes(saved);
-    // Auto-select the first one if exists
     if (saved.length > 0 && !mailbox) {
       setMailbox(saved[0]);
     }
@@ -75,14 +85,13 @@ function TempMailPage() {
   useEffect(() => {
     if (refreshRef.current) clearInterval(refreshRef.current);
     if (!mailbox) return;
-    // Initial fetch
     handleRefresh(true);
     refreshRef.current = setInterval(() => handleRefresh(true), 10000);
     return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
   }, [mailbox?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Generate new mailbox
-  const handleGenerate = useCallback(() => {
+  // Generate random mailbox
+  const handleGenerateRandom = useCallback(() => {
     setIsLoading(true);
     setSelectedMessage(null);
     setTimeout(async () => {
@@ -99,7 +108,33 @@ function TempMailPage() {
     }, 300);
   }, [addToast]);
 
-  // Switch to a saved mailbox
+  // Generate custom mailbox
+  const handleGenerateCustom = useCallback(() => {
+    if (!customPrefix.trim()) {
+      setCustomError('Enter an email prefix');
+      return;
+    }
+    setCustomError(null);
+    setIsLoading(true);
+    setSelectedMessage(null);
+    setTimeout(async () => {
+      const result = createCustomMailbox(customPrefix.trim());
+      if (result.success && result.mailbox) {
+        setMailbox(result.mailbox);
+        setSavedMailboxes(getAllMailboxes());
+        setCustomPrefix('');
+        addToast(`Inbox created: ${result.mailbox.email}`, 'success');
+        const msgs = await refreshInbox(result.mailbox.id);
+        setMessages(msgs);
+        setUnreadCount(getUnreadCount(result.mailbox.id));
+      } else {
+        setCustomError(result.error || 'Failed to create');
+      }
+      setIsLoading(false);
+    }, 300);
+  }, [customPrefix, addToast]);
+
+  // Switch mailbox
   const handleSelectMailbox = useCallback((mb: TempMailbox) => {
     setMailbox(mb);
     setSelectedMessage(null);
@@ -115,21 +150,27 @@ function TempMailPage() {
     }
   }, [mailbox, addToast]);
 
-  // Delete entire mailbox
+  // Delete entire mailbox (from saved list, not IMAP)
   const handleDeleteMailbox = useCallback(() => {
     if (mailbox) {
       deleteMailbox(mailbox.id);
       setSavedMailboxes(getAllMailboxes());
       const remaining = getAllMailboxes();
-      if (remaining.length > 0) {
-        setMailbox(remaining[0]);
-      } else {
-        setMailbox(null);
-        setMessages([]);
-      }
+      setMailbox(remaining.length > 0 ? remaining[0] : null);
+      setMessages([]);
       setSelectedMessage(null);
-      addToast('Inbox deleted', 'info');
+      addToast('Inbox removed from list', 'info');
     }
+  }, [mailbox, addToast]);
+
+  // Clear all messages for this inbox (from IMAP)
+  const handleClearMessages = useCallback(async () => {
+    if (!mailbox) return;
+    const count = await clearMailboxMessages(mailbox.id);
+    setMessages([]);
+    setUnreadCount(0);
+    setSelectedMessage(null);
+    addToast(`Cleared ${count} message(s) from server`, 'info');
   }, [mailbox, addToast]);
 
   // Delete single message
@@ -147,7 +188,7 @@ function TempMailPage() {
     }
   }, [mailbox, selectedMessage, addToast]);
 
-  // Select message — fetch full content
+  // Open full message
   const handleSelectMessage = useCallback(async (msg: TempMessage) => {
     if (msg.uid && mailbox) {
       setIsRefreshing(true);
@@ -161,6 +202,8 @@ function TempMailPage() {
     }
   }, [mailbox]);
 
+  const domain = getPrimaryDomain();
+
   return (
     <div className="min-h-screen relative">
       <div className="bg-glow" />
@@ -170,29 +213,92 @@ function TempMailPage() {
         <div className="w-full max-w-2xl">
           <TempMailHeader />
 
-          {/* Saved mailboxes quick-switch + generate */}
-          <div className="glass-card p-4 sm:p-5 mb-4 animate-fade-in-up" style={{ animationDelay: '0.1s', opacity: 0 }}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">Your Inboxes</h2>
+          {/* ── Create Inbox ─────────────────────────────── */}
+          <div className="glass-card p-5 sm:p-6 mb-4 animate-fade-in-up" style={{ animationDelay: '0.1s', opacity: 0 }}>
+            {/* Mode toggle */}
+            <div className="flex items-center gap-2 mb-4">
               <button
-                onClick={handleGenerate}
-                disabled={isLoading}
-                className="btn-primary !py-2 !px-4 !text-xs !rounded-xl"
+                onClick={() => { setMode('random'); setCustomError(null); }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
+                  mode === 'random'
+                    ? 'bg-violet-500/15 text-violet-300 border-violet-500/25'
+                    : 'bg-white/[0.02] text-white/30 border-white/[0.06] hover:text-white/50'
+                }`}
               >
-                {isLoading ? (
-                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                )}
-                New Inbox
+                🎲 Random
+              </button>
+              <button
+                onClick={() => { setMode('custom'); setCustomError(null); }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
+                  mode === 'custom'
+                    ? 'bg-violet-500/15 text-violet-300 border-violet-500/25'
+                    : 'bg-white/[0.02] text-white/30 border-white/[0.06] hover:text-white/50'
+                }`}
+              >
+                ✏️ Custom
               </button>
             </div>
 
-            {savedMailboxes.length === 0 ? (
-              <p className="text-white/15 text-xs text-center py-4">No inboxes yet. Click "New Inbox" to create one.</p>
+            {mode === 'random' ? (
+              <button
+                onClick={handleGenerateRandom}
+                disabled={isLoading}
+                className="btn-primary w-full !py-3"
+              >
+                {isLoading ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
+                Generate Random Email
+              </button>
             ) : (
+              <div>
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={customPrefix}
+                      onChange={(e) => { setCustomPrefix(e.target.value); setCustomError(null); }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleGenerateCustom()}
+                      placeholder="your-name"
+                      className="input-field !py-3 text-sm !pr-40"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/15 text-xs font-mono pointer-events-none">
+                      @{domain}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleGenerateCustom}
+                    disabled={isLoading}
+                    className="btn-primary !px-5 !py-3 flex-shrink-0"
+                  >
+                    {isLoading ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : 'Create'}
+                  </button>
+                </div>
+                {customError && (
+                  <p className="text-red-400/70 text-xs mt-2 flex items-center gap-1.5">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {customError}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Saved Inboxes ────────────────────────────── */}
+          {savedMailboxes.length > 0 && (
+            <div className="glass-card p-4 sm:p-5 mb-4 animate-fade-in-up" style={{ animationDelay: '0.15s', opacity: 0 }}>
+              <h2 className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">
+                Your Inboxes ({savedMailboxes.length})
+              </h2>
               <div className="flex flex-wrap gap-2">
                 {savedMailboxes.map(mb => (
                   <button
@@ -208,10 +314,10 @@ function TempMailPage() {
                   </button>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Active mailbox */}
+          {/* ── Active Mailbox ───────────────────────────── */}
           {mailbox && (
             <div className="space-y-4">
               <MailboxCard
@@ -220,11 +326,12 @@ function TempMailPage() {
                 onCopy={handleCopy}
                 onRefresh={() => handleRefresh(false)}
                 onDelete={handleDeleteMailbox}
-                onRegenerate={handleGenerate}
+                onClearMessages={handleClearMessages}
+                onRegenerate={handleGenerateRandom}
               />
 
               {/* Inbox / Message view */}
-              <div className="glass-card p-5 sm:p-6 animate-fade-in-up" style={{ animationDelay: '0.2s', opacity: 0 }}>
+              <div className="glass-card p-5 sm:p-6 animate-fade-in-up" style={{ animationDelay: '0.25s', opacity: 0 }}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest">
                     {selectedMessage ? 'Message' : 'Inbox'}
@@ -247,7 +354,6 @@ function TempMailPage() {
                       message={selectedMessage}
                       onBack={() => setSelectedMessage(null)}
                     />
-                    {/* Delete this message */}
                     <div className="mt-4 pt-4 border-t border-white/[0.06]">
                       <button
                         onClick={() => handleDeleteMessage(selectedMessage)}

@@ -1,10 +1,12 @@
 /**
  * Temp Mail Service — Connects to Mailcow via IMAP API.
  *
- * - No expiration: mailboxes persist forever until manually deleted
- * - Mailbox list stored in localStorage for persistence
- * - Messages filtered by TO address (each temp email sees only its own)
- * - Delete individual messages or entire mailbox
+ * Features:
+ *   - Random OR Custom email prefix
+ *   - No expiration (mailboxes persist in localStorage)
+ *   - Strict TO filtering per address
+ *   - Delete: single message, all messages for one inbox, admin purge all
+ *   - Auto-cleanup: 30-day-old messages purged on each visit
  */
 
 import { getPrimaryDomain } from './domain-config';
@@ -54,12 +56,16 @@ function generateId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-function generateEmailAddress(): string {
+function generateRandomPrefix(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  const prefix = Array.from({ length: 8 }, () =>
+  return Array.from({ length: 8 }, () =>
     chars[Math.floor(Math.random() * chars.length)]
   ).join('');
-  return `${prefix}@${getPrimaryDomain()}`;
+}
+
+function sanitizePrefix(prefix: string): string {
+  // Only allow letters, numbers, dots, hyphens, underscores
+  return prefix.toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 30);
 }
 
 // ─── Cached messages (in-memory per session) ───────────────────────
@@ -130,6 +136,16 @@ async function deleteMessageFromAPI(uid: number): Promise<boolean> {
   }
 }
 
+export async function clearInboxFromAPI(address: string): Promise<number> {
+  try {
+    const res = await fetch(`/api/mail/clear?address=${encodeURIComponent(address)}`, { method: 'DELETE' });
+    const data = await res.json();
+    return data.deleted || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function purgeAllFromAPI(): Promise<number> {
   try {
     const res = await fetch('/api/mail/purge', { method: 'DELETE' });
@@ -140,16 +156,62 @@ export async function purgeAllFromAPI(): Promise<number> {
   }
 }
 
+export async function cleanupOldFromAPI(days: number = 30): Promise<number> {
+  try {
+    const res = await fetch(`/api/mail/cleanup?days=${days}`, { method: 'DELETE' });
+    const data = await res.json();
+    return data.deleted || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ─── Auto-cleanup on load ──────────────────────────────────────────
+
+let cleanupDone = false;
+export function triggerAutoCleanup(): void {
+  if (cleanupDone) return;
+  cleanupDone = true;
+  // Fire-and-forget: delete messages older than 30 days
+  cleanupOldFromAPI(30).then(count => {
+    if (count > 0) console.log(`Auto-cleanup: removed ${count} messages older than 30 days`);
+  }).catch(() => {});
+}
+
 // ─── Public API ────────────────────────────────────────────────────
 
-export function createMailbox(): {
-  success: boolean;
-  mailbox?: TempMailbox;
-  error?: string;
-} {
+/**
+ * Creates a mailbox with a random prefix.
+ */
+export function createMailbox(): { success: boolean; mailbox?: TempMailbox; error?: string } {
+  const email = `${generateRandomPrefix()}@${getPrimaryDomain()}`;
+  return createMailboxWithEmail(email);
+}
+
+/**
+ * Creates a mailbox with a custom prefix.
+ */
+export function createCustomMailbox(prefix: string): { success: boolean; mailbox?: TempMailbox; error?: string } {
+  const clean = sanitizePrefix(prefix);
+  if (!clean || clean.length < 2) {
+    return { success: false, error: 'Prefix must be at least 2 characters (letters, numbers, dots, hyphens)' };
+  }
+
+  const email = `${clean}@${getPrimaryDomain()}`;
+  
+  // Check if already exists
+  const existing = loadMailboxes();
+  if (existing.some(m => m.email === email)) {
+    return { success: false, error: 'This email address already exists in your list' };
+  }
+
+  return createMailboxWithEmail(email);
+}
+
+function createMailboxWithEmail(email: string): { success: boolean; mailbox?: TempMailbox; error?: string } {
   const mailbox: TempMailbox = {
     id: generateId(),
-    email: generateEmailAddress(),
+    email,
     createdAt: Date.now(),
   };
 
@@ -201,6 +263,17 @@ export async function deleteMessage(uid: number, mailboxId: string): Promise<boo
     cachedMessages[mailboxId] = cachedMessages[mailboxId].filter(m => m.uid !== uid);
   }
   return ok;
+}
+
+/**
+ * Clears all messages for a specific mailbox from IMAP.
+ */
+export async function clearMailboxMessages(mailboxId: string): Promise<number> {
+  const mb = getMailbox(mailboxId);
+  if (!mb) return 0;
+  const count = await clearInboxFromAPI(mb.email);
+  cachedMessages[mailboxId] = [];
+  return count;
 }
 
 export function deleteMailbox(mailboxId: string): void {

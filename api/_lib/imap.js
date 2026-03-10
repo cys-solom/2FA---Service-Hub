@@ -167,4 +167,48 @@ async function purgeAllMessages() {
   });
 }
 
-export { withImap, fetchEmailsForAddress, fetchMessageByUid, deleteMessageByUid, purgeAllMessages, IMAP_CONFIG };
+export { withImap, fetchEmailsForAddress, fetchMessageByUid, deleteMessageByUid, deleteMessagesForAddress, purgeAllMessages, purgeOldMessages, IMAP_CONFIG };
+
+/**
+ * Deletes ALL messages for a specific TO address.
+ */
+async function deleteMessagesForAddress(address) {
+  return withImap(async (client) => {
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      const results = await client.search({ to: address });
+      let count = 0;
+      if (results && results.length > 0) {
+        for (const uid of results) {
+          try { await client.messageDelete(uid); count++; } catch { /* skip */ }
+        }
+      }
+      return count;
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
+ * Deletes messages older than N days from INBOX.
+ */
+async function purgeOldMessages(days = 30) {
+  return withImap(async (client) => {
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const results = await client.search({ before: cutoff });
+      let count = 0;
+      if (results && results.length > 0) {
+        for (const uid of results) {
+          try { await client.messageDelete(uid); count++; } catch { /* skip */ }
+        }
+      }
+      return count;
+    } finally {
+      lock.release();
+    }
+  });
+}
