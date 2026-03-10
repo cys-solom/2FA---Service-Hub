@@ -3,7 +3,7 @@
  *
  * Features:
  *   - Check existing inbox or create new Random/Custom email
- *   - Direct links: /temp-mail/email@domain
+ *   - Direct links: /mail/email@domain
  *   - Delete messages, clear inbox
  */
 

@@ -44,7 +44,7 @@ const DEFAULT_CONFIG: AdminConfig = {
   maxMessages: 50,
   guestMode: true,
   adminEmail: 'admin@servicehub-mail.cloud',
-  adminPassword: 'Admin2030',
+  adminPassword: 'Fee2030@#',
   createCode: 'SH2030',
 };
 

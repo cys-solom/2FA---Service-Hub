@@ -5,7 +5,7 @@
  *   /            → Redirect to /2fa
  *   /2fa         → 2FA TOTP Generator
  *   /2fa/:secret → 2FA with pre-filled secret
- *   /temp-mail   → Temp Mail inbox
+ *   /mail        → Service Hub Mail
  *   /admin       → Admin panel (domains + settings)
  */
 
@@ -23,8 +23,8 @@ function App() {
         <Route path="/" element={<Navigate to="/2fa" replace />} />
         <Route path="/2fa" element={<TwoFAPage />} />
         <Route path="/2fa/:secret" element={<TwoFAPage />} />
-        <Route path="/temp-mail" element={<TempMailPage />} />
-        <Route path="/temp-mail/:address" element={<TempMailPage />} />
+        <Route path="/mail" element={<TempMailPage />} />
+        <Route path="/mail/:address" element={<TempMailPage />} />
         <Route path="/admin" element={<AdminPage />} />
         {/* Fallback: treat unknown paths as 2FA secret for backward compat */}
         <Route path="/:secret" element={<TwoFAPage />} />

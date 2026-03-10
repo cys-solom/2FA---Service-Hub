@@ -160,7 +160,7 @@ function AdminDashboard() {
 
   const handleLogout = useCallback(() => {
     logoutAdmin();
-    navigate('/temp-mail');
+    navigate('/mail');
   }, [navigate]);
 
   useEffect(() => {

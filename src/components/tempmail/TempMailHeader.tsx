@@ -16,7 +16,7 @@ const TempMailHeader: React.FC = () => (
     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1.5">
       <span className="text-white">Service Hub</span>
       <span className="text-white/30 mx-1.5">-</span>
-      <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">Temp Mail</span>
+      <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">Mail</span>
     </h1>
 
     <p className="text-white/25 text-xs sm:text-sm font-light tracking-wide mb-4">
@@ -29,7 +29,7 @@ const TempMailHeader: React.FC = () => (
           d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
       </svg>
       <span className="text-[11px] text-violet-300/70 font-medium tracking-wide">
-        Receive-only · Auto-expiring · No data stored
+        Receive-only · Secure · Fast delivery
       </span>
     </div>
   </div>
