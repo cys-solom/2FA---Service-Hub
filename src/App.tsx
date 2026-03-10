@@ -24,6 +24,7 @@ function App() {
         <Route path="/2fa" element={<TwoFAPage />} />
         <Route path="/2fa/:secret" element={<TwoFAPage />} />
         <Route path="/temp-mail" element={<TempMailPage />} />
+        <Route path="/temp-mail/:address" element={<TempMailPage />} />
         <Route path="/admin" element={<AdminPage />} />
         {/* Fallback: treat unknown paths as 2FA secret for backward compat */}
         <Route path="/:secret" element={<TwoFAPage />} />

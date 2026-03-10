@@ -16,11 +16,16 @@ export interface DomainConfig {
 
 export interface AdminConfig {
   domains: DomainConfig[];
-  mailboxTTL: number;       // default expiry in minutes
-  maxMailboxes: number;      // max per user
-  maxMessages: number;       // max per mailbox
-  guestMode: boolean;        // allow unauthenticated usage
+  mailboxTTL: number;
+  maxMailboxes: number;
+  maxMessages: number;
+  guestMode: boolean;
+  adminEmail: string;
+  adminPassword: string;
+  createCode: string;         // secret code required to create mailboxes
 }
+
+const ADMIN_SESSION_KEY = 'servicehub_admin_session';
 
 const STORAGE_KEY = 'servicehub_admin_config';
 
@@ -38,6 +43,9 @@ const DEFAULT_CONFIG: AdminConfig = {
   maxMailboxes: 5,
   maxMessages: 50,
   guestMode: true,
+  adminEmail: 'admin@servicehub-mail.cloud',
+  adminPassword: 'Admin2030',
+  createCode: 'SH2030',
 };
 
 function generateId(): string {
@@ -163,11 +171,46 @@ export function toggleDomainActive(id: string): void {
   }
 }
 
-export function updateSettings(settings: Partial<Pick<AdminConfig, 'mailboxTTL' | 'maxMailboxes' | 'maxMessages' | 'guestMode'>>): void {
+export function updateSettings(settings: Partial<Pick<AdminConfig, 'mailboxTTL' | 'maxMailboxes' | 'maxMessages' | 'guestMode' | 'adminEmail' | 'adminPassword' | 'createCode'>>): void {
   const config = getAdminConfig();
   if (settings.mailboxTTL !== undefined) config.mailboxTTL = settings.mailboxTTL;
   if (settings.maxMailboxes !== undefined) config.maxMailboxes = settings.maxMailboxes;
   if (settings.maxMessages !== undefined) config.maxMessages = settings.maxMessages;
   if (settings.guestMode !== undefined) config.guestMode = settings.guestMode;
+  if (settings.adminEmail !== undefined) config.adminEmail = settings.adminEmail;
+  if (settings.adminPassword !== undefined) config.adminPassword = settings.adminPassword;
+  if (settings.createCode !== undefined) config.createCode = settings.createCode;
   saveAdminConfig(config);
+}
+
+// ─── Admin Authentication ──────────────────────────────────────────
+
+export function loginAdmin(email: string, password: string): boolean {
+  const config = getAdminConfig();
+  if (email === config.adminEmail && password === config.adminPassword) {
+    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ email, ts: Date.now() }));
+    return true;
+  }
+  return false;
+}
+
+export function isAdminLoggedIn(): boolean {
+  try {
+    const session = sessionStorage.getItem(ADMIN_SESSION_KEY);
+    if (!session) return false;
+    const data = JSON.parse(session);
+    // Session expires after 2 hours
+    return Date.now() - data.ts < 2 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+export function logoutAdmin(): void {
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
+}
+
+export function validateCreateCode(code: string): boolean {
+  const config = getAdminConfig();
+  return code === config.createCode;
 }
