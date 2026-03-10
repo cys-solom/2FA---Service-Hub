@@ -1,9 +1,10 @@
 /**
  * Service Hub - Temp Mail Page
  *
- * Two access levels:
- *   1. Public: Enter existing email or visit /temp-mail/email@domain to check inbox
- *   2. Admin (create code): Create Random or Custom mailboxes
+ * Features:
+ *   - Check existing inbox or create new Random/Custom email
+ *   - Direct links: /temp-mail/email@domain
+ *   - Delete messages, clear inbox
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -29,7 +30,7 @@ import {
   clearMailboxMessages,
   triggerAutoCleanup,
 } from '../services/tempmail-service';
-import { getPrimaryDomain, validateCreateCode } from '../services/domain-config';
+import { getPrimaryDomain } from '../services/domain-config';
 
 function TempMailPage() {
   const { address: urlAddress } = useParams<{ address?: string }>();
@@ -41,13 +42,7 @@ function TempMailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toasts, setToasts] = useState<ToastData[]>([]);
-  // Check inbox (public)
   const [checkEmail, setCheckEmail] = useState('');
-  // Create mode (admin)
-  const [showCreate, setShowCreate] = useState(false);
-  const [createCode, setCreateCode] = useState('');
-  const [codeVerified, setCodeVerified] = useState(false);
-  const [codeError, setCodeError] = useState('');
   const [createMode, setCreateMode] = useState<'random' | 'custom'>('random');
   const [customPrefix, setCustomPrefix] = useState('');
   const [customError, setCustomError] = useState<string | null>(null);
@@ -141,15 +136,7 @@ function TempMailPage() {
     }, 200);
   }, [checkEmail, domain]);
 
-  // Verify create code
-  const handleVerifyCode = useCallback(() => {
-    if (validateCreateCode(createCode)) {
-      setCodeVerified(true);
-      setCodeError('');
-    } else {
-      setCodeError('Invalid code');
-    }
-  }, [createCode]);
+
 
   // Generate random
   const handleGenerateRandom = useCallback(() => {
@@ -275,80 +262,46 @@ function TempMailPage() {
             <p className="text-[10px] text-white/15 mt-2">Enter your email address to check for messages</p>
           </div>
 
-          {/* ── Create New (Admin with code) ────────── */}
+          {/* ── Create New Email ────────────────────── */}
           <div className="glass-card p-5 sm:p-6 mb-4 animate-fade-in-up" style={{ animationDelay: '0.15s', opacity: 0 }}>
-            <button
-              onClick={() => setShowCreate(!showCreate)}
-              className="flex items-center justify-between w-full text-left"
-            >
-              <h2 className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">Create New Email</h2>
-              <svg className={`w-3.5 h-3.5 text-white/20 transition-transform ${showCreate ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+            <h2 className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Create New Email</h2>
+            
+            {/* Mode toggle */}
+            <div className="flex items-center gap-2 mb-3">
+              <button onClick={() => setCreateMode('random')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
+                  createMode === 'random' ? 'bg-violet-500/15 text-violet-300 border-violet-500/25' : 'bg-white/[0.02] text-white/30 border-white/[0.06] hover:text-white/50'
+                }`}>
+                🎲 Random
+              </button>
+              <button onClick={() => setCreateMode('custom')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
+                  createMode === 'custom' ? 'bg-violet-500/15 text-violet-300 border-violet-500/25' : 'bg-white/[0.02] text-white/30 border-white/[0.06] hover:text-white/50'
+                }`}>
+                ✏️ Custom
+              </button>
+            </div>
 
-            {showCreate && (
-              <div className="mt-4 animate-fade-in">
-                {!codeVerified ? (
-                  <div>
-                    <p className="text-xs text-white/25 mb-3">Enter the admin code to create new mailboxes</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="password"
-                        value={createCode}
-                        onChange={e => { setCreateCode(e.target.value); setCodeError(''); }}
-                        onKeyDown={e => e.key === 'Enter' && handleVerifyCode()}
-                        placeholder="Enter code..."
-                        className="input-field !py-2.5 text-sm flex-1 font-mono"
-                      />
-                      <button onClick={handleVerifyCode} className="btn-primary !px-5 !py-2.5 !text-xs">
-                        Verify
-                      </button>
-                    </div>
-                    {codeError && <p className="text-red-400/70 text-xs mt-2">{codeError}</p>}
-                  </div>
-                ) : (
-                  <div>
-                    {/* Mode toggle */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <button onClick={() => setCreateMode('random')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
-                          createMode === 'random' ? 'bg-violet-500/15 text-violet-300 border-violet-500/25' : 'bg-white/[0.02] text-white/30 border-white/[0.06]'
-                        }`}>
-                        🎲 Random
-                      </button>
-                      <button onClick={() => setCreateMode('custom')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
-                          createMode === 'custom' ? 'bg-violet-500/15 text-violet-300 border-violet-500/25' : 'bg-white/[0.02] text-white/30 border-white/[0.06]'
-                        }`}>
-                        ✏️ Custom
-                      </button>
-                    </div>
-
-                    {createMode === 'random' ? (
-                      <button onClick={handleGenerateRandom} disabled={isLoading} className="btn-primary w-full !py-3">
-                        {isLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : (
-                          <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg> Generate Random Email</>
-                        )}
-                      </button>
-                    ) : (
-                      <div>
-                        <div className="flex gap-2">
-                          <div className="flex-1 relative">
-                            <input type="text" value={customPrefix} onChange={e => { setCustomPrefix(e.target.value); setCustomError(null); }}
-                              onKeyDown={e => e.key === 'Enter' && handleGenerateCustom()} placeholder="your-name"
-                              className="input-field !py-3 text-sm !pr-40" />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/15 text-xs font-mono pointer-events-none">@{domain}</span>
-                          </div>
-                          <button onClick={handleGenerateCustom} disabled={isLoading} className="btn-primary !px-5 !py-3 flex-shrink-0">
-                            {isLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Create'}
-                          </button>
-                        </div>
-                        {customError && <p className="text-red-400/70 text-xs mt-2">{customError}</p>}
-                      </div>
-                    )}
-                  </div>
+            {createMode === 'random' ? (
+              <button onClick={handleGenerateRandom} disabled={isLoading} className="btn-primary w-full !py-3">
+                {isLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : (
+                  <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg> Generate Random Email</>
                 )}
+              </button>
+            ) : (
+              <div>
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input type="text" value={customPrefix} onChange={e => { setCustomPrefix(e.target.value); setCustomError(null); }}
+                      onKeyDown={e => e.key === 'Enter' && handleGenerateCustom()} placeholder="your-name"
+                      className="input-field !py-3 text-sm !pr-40" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/15 text-xs font-mono pointer-events-none">@{domain}</span>
+                  </div>
+                  <button onClick={handleGenerateCustom} disabled={isLoading} className="btn-primary !px-5 !py-3 flex-shrink-0">
+                    {isLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Create'}
+                  </button>
+                </div>
+                {customError && <p className="text-red-400/70 text-xs mt-2">{customError}</p>}
               </div>
             )}
           </div>
