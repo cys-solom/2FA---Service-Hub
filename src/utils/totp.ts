@@ -171,9 +171,13 @@ export function extractSecretFromURL(): { secret: string; params?: OTPAuthParams
     return { secret: cleanSecret(querySecret) };
   }
 
-  // Check for secret in the URL path
-  const pathSecret = url.pathname.replace(/^\//, '').replace(/\/$/, '');
-  if (pathSecret && validateBase32(cleanSecret(pathSecret))) {
+  // Check for secret in the URL path (handles /SECRET and /2fa/SECRET)
+  let pathSecret = url.pathname.replace(/^\//, '').replace(/\/$/, '');
+  // If path starts with '2fa/', strip that prefix
+  if (pathSecret.startsWith('2fa/')) {
+    pathSecret = pathSecret.slice(4);
+  }
+  if (pathSecret && pathSecret !== '2fa' && pathSecret !== 'temp-mail' && validateBase32(cleanSecret(pathSecret))) {
     return { secret: cleanSecret(pathSecret) };
   }
 
