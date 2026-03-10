@@ -20,8 +20,20 @@ import {
   validateBase32,
   cleanSecret,
   extractSecretFromURL,
-  cleanURL,
 } from './utils/totp';
+
+/**
+ * Updates the URL path to reflect the current secret.
+ * Uses replaceState to avoid polluting browser history.
+ */
+function syncSecretToURL(secret: string) {
+  const cleaned = cleanSecret(secret);
+  if (cleaned && validateBase32(cleaned)) {
+    window.history.replaceState({}, '', `/${cleaned}`);
+  } else if (!cleaned) {
+    window.history.replaceState({}, '', '/');
+  }
+}
 
 function App() {
   const [secret, setSecret] = useState('');
@@ -65,21 +77,32 @@ function App() {
     const cleaned = cleanSecret(newSecret);
     if (cleaned.length === 0) {
       setCode(null);
+      syncSecretToURL('');
       return;
     }
     generateCode(newSecret);
+    // Sync secret to URL path in real-time
+    syncSecretToURL(newSecret);
   }, [generateCode]);
 
   const handleClear = useCallback(() => {
     setSecret('');
     setCode(null);
     setError(null);
+    syncSecretToURL('');
     addToast('Secret cleared from memory', 'info');
   }, [addToast]);
 
+  /** Actually copy the code to clipboard */
   const handleCopy = useCallback(() => {
-    addToast('Code copied to clipboard', 'success');
-  }, [addToast]);
+    if (code) {
+      navigator.clipboard.writeText(code).then(() => {
+        addToast('Code copied to clipboard', 'success');
+      }).catch(() => {
+        addToast('Failed to copy', 'error');
+      });
+    }
+  }, [code, addToast]);
 
   // Extract secret from URL on mount
   useEffect(() => {
@@ -87,7 +110,7 @@ function App() {
     if (urlData) {
       setSecret(urlData.secret);
       generateCode(urlData.secret);
-      cleanURL();
+      // Keep the secret in the URL (don't clean it)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
