@@ -3,18 +3,20 @@ import { Link, useLocation } from 'react-router-dom';
 
 const navItems = [
   {
-    to: '/2fa',
-    label: '2FA',
+    to: '/2fa-code',
+    label: '2FA Code',
+    activeColor: 'emerald',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
       </svg>
     ),
   },
   {
-    to: '/mail',
-    label: 'Mail',
+    to: '/service-mail',
+    label: 'Service Mail',
+    activeColor: 'violet',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -24,15 +26,22 @@ const navItems = [
   },
   {
     to: '/receive-code',
-    label: 'Receive Code',
+    label: 'Inbox',
+    activeColor: 'cyan',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+          d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
       </svg>
     ),
   },
 ];
+
+const activeStyles: Record<string, string> = {
+  emerald: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shadow-sm shadow-emerald-500/10',
+  violet: 'bg-violet-500/15 text-violet-300 border border-violet-500/25 shadow-sm shadow-violet-500/10',
+  cyan: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 shadow-sm shadow-cyan-500/10',
+};
 
 const Navigation: React.FC = () => {
   const location = useLocation();
@@ -42,16 +51,16 @@ const Navigation: React.FC = () => {
 
   return (
     <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
-      <div className="flex items-center gap-1 p-1 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-2xl">
+      <div className="flex items-center gap-1 p-1.5 rounded-2xl bg-[#0a0a1a]/80 backdrop-blur-2xl border border-white/[0.08] shadow-2xl shadow-black/40">
         {navItems.map((item) => {
           const isActive = location.pathname.startsWith(item.to);
           return (
             <Link
               key={item.to}
               to={item.to}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all duration-200
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap
                 ${isActive
-                  ? 'bg-violet-500/15 text-violet-300 border border-violet-500/20 shadow-sm'
+                  ? activeStyles[item.activeColor]
                   : 'text-white/30 hover:text-white/60 hover:bg-white/[0.04] border border-transparent'
                 }`}
             >

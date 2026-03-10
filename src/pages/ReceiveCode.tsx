@@ -149,23 +149,23 @@ function ReceiveCodePage() {
       <div className="bg-glow" />
       <div className="grid-pattern fixed inset-0 z-0 pointer-events-none" />
 
-      <main className="relative z-10 flex items-start justify-center min-h-screen px-4 py-8 pt-20">
+      <main className="relative z-10 flex items-start justify-center min-h-screen px-4 py-8 pt-24">
         <div className="w-full max-w-xl">
 
           {/* ── Header ─────────────────────────────────── */}
           <div className="text-center mb-8 animate-fade-in-up" style={{ opacity: 0 }}>
             <div className="relative inline-flex items-center justify-center mb-5">
-              <div className="absolute w-20 h-20 rounded-3xl bg-violet-500/15 blur-2xl animate-pulse" />
-              <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-violet-500/30">
+              <div className="absolute w-20 h-20 rounded-3xl bg-cyan-500/15 blur-2xl animate-pulse" />
+              <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-cyan-500/30">
                 <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6}
-                    d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                    d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                 </svg>
               </div>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-              <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">Receive Code</span>
+              <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">Receive Code</span>
             </h1>
             <p className="text-white/20 text-xs sm:text-sm font-light tracking-wide">
               Enter your email to view verification codes
@@ -195,7 +195,7 @@ function ReceiveCodePage() {
               <button
                 onClick={() => loadInbox(email)}
                 disabled={isLoading || !email.trim()}
-                className="btn-primary !px-6 !py-3.5 flex-shrink-0"
+                className="btn-primary-cyan !px-6 !py-3.5 flex-shrink-0"
               >
                 {isLoading ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -219,9 +219,9 @@ function ReceiveCodePage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow shadow-emerald-400/30" />
-                    <span className="text-sm font-mono text-violet-300/80 truncate">{activeEmail}</span>
+                    <span className="text-sm font-mono text-cyan-300/80 truncate">{activeEmail}</span>
                     {unreadCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-violet-500/12 border border-violet-500/15 text-[9px] text-violet-300 font-bold">{unreadCount} new</span>
+                      <span className="px-2 py-0.5 rounded-full bg-cyan-500/12 border border-cyan-500/15 text-[9px] text-cyan-300 font-bold">{unreadCount} new</span>
                     )}
                   </div>
                   <button onClick={handleRefresh} className="p-2 rounded-lg text-white/20 hover:text-white/50 hover:bg-white/[0.05] transition-all" title="Refresh">
@@ -264,7 +264,10 @@ function ReceiveCodePage() {
             </div>
           )}
 
-          <Footer />
+          <Footer
+            brand="Service Hub — Inbox"
+            tagline="Quick access to verification codes · OTP messages · email notifications"
+          />
         </div>
       </main>
 

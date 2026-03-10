@@ -36,8 +36,8 @@ const TimerBar: React.FC<TimerBarProps> = ({ timeRemaining, period, isActive }) 
       text: 'text-amber-400', bg: 'rgba(245, 158, 11, 0.04)',
     };
     return {
-      main: '#8b5cf6', glow: 'rgba(139, 92, 246, 0.3)', inner: '#c4b5fd',
-      text: 'text-violet-400', bg: 'rgba(139, 92, 246, 0.04)',
+      main: '#10b981', glow: 'rgba(16, 185, 129, 0.3)', inner: '#6ee7b7',
+      text: 'text-emerald-400', bg: 'rgba(16, 185, 129, 0.04)',
     };
   };
 

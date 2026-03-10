@@ -22,9 +22,9 @@ import {
 function syncSecretToURL(secret: string) {
   const cleaned = cleanSecret(secret);
   if (cleaned && validateBase32(cleaned)) {
-    window.history.replaceState({}, '', `/2fa/${cleaned}`);
+    window.history.replaceState({}, '', `/2fa-code/${cleaned}`);
   } else if (!cleaned) {
-    window.history.replaceState({}, '', '/2fa');
+    window.history.replaceState({}, '', '/2fa-code');
   }
 }
 
@@ -127,7 +127,7 @@ function TwoFAPage() {
       <div className="bg-glow" />
       <div className="grid-pattern fixed inset-0 z-0 pointer-events-none" />
 
-      <main className="relative z-10 flex items-center justify-center min-h-screen px-4 py-8">
+      <main className="relative z-10 flex items-center justify-center min-h-screen px-4 py-8 pt-24">
         <div className="w-full max-w-md">
           <Header />
 
@@ -139,7 +139,7 @@ function TwoFAPage() {
 
             {isActive && (
               <div className="flex gap-2.5 animate-fade-in">
-                <button onClick={handleCopy} className="btn-primary flex-1">
+                <button onClick={handleCopy} className="btn-primary-emerald flex-1">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -158,7 +158,10 @@ function TwoFAPage() {
           </div>
 
           <SecurityNotice />
-          <Footer />
+          <Footer
+            brand="Service Hub — 2FA"
+            tagline="Compatible with Google · ChatGPT · GitHub · Adobe · Discord · Gemini & all 2FA services"
+          />
         </div>
       </main>
 

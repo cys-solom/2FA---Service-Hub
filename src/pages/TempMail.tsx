@@ -1,10 +1,8 @@
 /**
- * Service Hub - Temp Mail Page
+ * Service Hub - Service Mail Page
  *
- * Features:
- *   - Check existing inbox or create new Random/Custom email
- *   - Direct links: /mail/email@domain
- *   - Delete messages, clear inbox
+ * Protected by email/password (configurable from admin).
+ * Route: /service-mail
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -30,9 +28,9 @@ import {
   clearMailboxMessages,
   triggerAutoCleanup,
 } from '../services/tempmail-service';
-import { getPrimaryDomain } from '../services/domain-config';
+import { getPrimaryDomain, loginServiceMail, isServiceMailLoggedIn, logoutServiceMail } from '../services/domain-config';
 
-function TempMailPage() {
+function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
   const { address: urlAddress } = useParams<{ address?: string }>();
   const [mailbox, setMailbox] = useState<TempMailbox | null>(null);
   const [savedMailboxes, setSavedMailboxes] = useState<TempMailbox[]>([]);
@@ -237,8 +235,13 @@ function TempMailPage() {
       <div className="bg-glow" />
       <div className="grid-pattern fixed inset-0 z-0 pointer-events-none" />
 
-      <main className="relative z-10 flex items-start justify-center min-h-screen px-4 py-8 pt-20">
+      <main className="relative z-10 flex items-start justify-center min-h-screen px-4 py-8 pt-24">
         <div className="w-full max-w-2xl">
+          <div className="flex justify-end mb-2 animate-fade-in">
+            <button onClick={onLogout} className="px-3 py-1.5 rounded-xl text-[10px] text-white/25 hover:text-white/50 bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] transition-all">
+              Logout
+            </button>
+          </div>
           <TempMailHeader />
 
 
@@ -349,7 +352,10 @@ function TempMailPage() {
             </div>
           )}
 
-          <Footer />
+          <Footer
+            brand="Service Hub — Mail"
+            tagline="Private inboxes for testing · verification codes · email forwarding & more"
+          />
         </div>
       </main>
 
@@ -357,5 +363,80 @@ function TempMailPage() {
     </div>
   );
 }
+// ─── Login Screen ─────────────────────────────────────────────────
 
-export default TempMailPage;
+function ServiceMailLogin({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (loginServiceMail(email, password)) {
+      onLogin();
+    } else {
+      setError('Invalid email or password');
+    }
+  };
+
+  return (
+    <div className="min-h-screen relative flex items-center justify-center px-4">
+      <div className="bg-glow" />
+      <div className="grid-pattern fixed inset-0 z-0 pointer-events-none" />
+      <div className="relative z-10 w-full max-w-sm">
+        <div className="glass-card p-8 sm:p-10 animate-scale-in">
+          <div className="text-center mb-8">
+            <div className="relative inline-flex items-center justify-center mb-4">
+              <div className="absolute w-14 h-14 rounded-2xl bg-violet-500/20 blur-xl animate-pulse" />
+              <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-violet-500/25">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+            <h1 className="text-xl font-bold text-white tracking-tight">Service Mail</h1>
+            <p className="text-white/20 text-xs mt-1">Sign in to manage mailboxes</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-1.5">Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                className="input-field !py-3 text-sm" placeholder="mail@..." required autoFocus />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-1.5">Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                className="input-field !py-3 text-sm" placeholder="••••••••" required />
+            </div>
+            {error && (
+              <p className="text-red-400/80 text-xs flex items-center gap-1.5 animate-fade-in">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {error}
+              </p>
+            )}
+            <button type="submit" className="btn-primary w-full !py-3 mt-2">Sign In</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Export ──────────────────────────────────────────────────
+
+function ServiceMailPage() {
+  const [loggedIn, setLoggedIn] = useState(isServiceMailLoggedIn());
+
+  if (!loggedIn) {
+    return <ServiceMailLogin onLogin={() => setLoggedIn(true)} />;
+  }
+
+  return <TempMailPageContent onLogout={() => { logoutServiceMail(); setLoggedIn(false); }} />;
+}
+
+export default ServiceMailPage;

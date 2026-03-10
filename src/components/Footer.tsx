@@ -3,7 +3,17 @@ import React from 'react';
 const FACEBOOK_URL = 'https://www.facebook.com/share/1DoNuqU29W/?mibextid=wwXIfr';
 const WHATSAPP_URL = 'https://wa.me/201141661320';
 
-const Footer: React.FC = () => {
+interface FooterProps {
+  /** Page brand label, e.g. "Service Hub - 2FA" */
+  brand?: string;
+  /** Compatibility / description text */
+  tagline?: string;
+}
+
+const Footer: React.FC<FooterProps> = ({
+  brand = 'Service Hub',
+  tagline = 'Your all-in-one digital service platform',
+}) => {
   return (
     <footer className="text-center py-6 mt-4 space-y-4">
       {/* Social links */}
@@ -40,10 +50,10 @@ const Footer: React.FC = () => {
       {/* Brand and compatibility text */}
       <div>
         <p className="text-white/30 text-[11px] tracking-widest uppercase font-medium mb-1">
-          Service Hub - 2FA
+          {brand}
         </p>
         <p className="text-white/20 text-[10px] tracking-wide">
-          Compatible with Google · ChatGPT · GitHub · Adobe · Discord · Gemini &amp; all 2FA services
+          {tagline}
         </p>
       </div>
     </footer>

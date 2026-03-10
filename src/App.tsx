@@ -2,10 +2,10 @@
  * Service Hub — Main Application Router
  *
  * Routes:
- *   /            → Redirect to /2fa
- *   /2fa         → 2FA TOTP Generator
- *   /2fa/:secret → 2FA with pre-filled secret
- *   /mail          → Service Hub Mail (create mailboxes)
+ *   /            → Redirect to /2fa-code
+ *   /2fa-code         → 2FA TOTP Generator
+ *   /2fa-code/:secret → 2FA with pre-filled secret
+ *   /service-mail   → Service Hub Mail (create mailboxes)
  *   /receive-code  → Receive Code (client inbox checker)
  *   /admin         → Admin panel (hidden, login required)
  */
@@ -22,11 +22,11 @@ function App() {
     <BrowserRouter>
       <Navigation />
       <Routes>
-        <Route path="/" element={<Navigate to="/2fa" replace />} />
-        <Route path="/2fa" element={<TwoFAPage />} />
-        <Route path="/2fa/:secret" element={<TwoFAPage />} />
-        <Route path="/mail" element={<TempMailPage />} />
-        <Route path="/mail/:address" element={<TempMailPage />} />
+        <Route path="/" element={<Navigate to="/2fa-code" replace />} />
+        <Route path="/2fa-code" element={<TwoFAPage />} />
+        <Route path="/2fa-code/:secret" element={<TwoFAPage />} />
+        <Route path="/service-mail" element={<TempMailPage />} />
+        <Route path="/service-mail/:address" element={<TempMailPage />} />
         <Route path="/receive-code" element={<ReceiveCodePage />} />
         <Route path="/receive-code/:address" element={<ReceiveCodePage />} />
         <Route path="/admin" element={<AdminPage />} />

@@ -12,6 +12,18 @@ export interface DomainConfig {
   isActive: boolean;
   isPrimary: boolean;
   createdAt: number;
+  // IMAP settings (for receiving mail)
+  imapHost?: string;
+  imapPort?: number;
+  imapUser?: string;
+  imapPassword?: string;
+  imapTls?: boolean;
+  // SMTP settings (optional, for sending)
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPassword?: string;
+  smtpTls?: boolean;
 }
 
 export interface AdminConfig {
@@ -22,10 +34,13 @@ export interface AdminConfig {
   guestMode: boolean;
   adminEmail: string;
   adminPassword: string;
-  createCode: string;         // secret code required to create mailboxes
+  createCode: string;
+  serviceMailEmail: string;     // login for /service-mail page
+  serviceMailPassword: string;
 }
 
 const ADMIN_SESSION_KEY = 'servicehub_admin_session';
+const SMAIL_SESSION_KEY = 'servicehub_smail_session';
 
 const STORAGE_KEY = 'servicehub_admin_config';
 
@@ -37,6 +52,16 @@ const DEFAULT_CONFIG: AdminConfig = {
       isActive: true,
       isPrimary: true,
       createdAt: Date.now(),
+      imapHost: 'mail.servicehub-mail.cloud',
+      imapPort: 993,
+      imapUser: 'inbox@servicehub-mail.cloud',
+      imapPassword: '',
+      imapTls: true,
+      smtpHost: 'mail.servicehub-mail.cloud',
+      smtpPort: 587,
+      smtpUser: 'inbox@servicehub-mail.cloud',
+      smtpPassword: '',
+      smtpTls: true,
     },
   ],
   mailboxTTL: 30,
@@ -46,6 +71,8 @@ const DEFAULT_CONFIG: AdminConfig = {
   adminEmail: 'admin@servicehub-mail.cloud',
   adminPassword: 'Fee2030@#',
   createCode: 'SH2030',
+  serviceMailEmail: 'Inbox@servicehub-mail.cloud',
+  serviceMailPassword: 'Box2030!@#',
 };
 
 function generateId(): string {
@@ -60,6 +87,32 @@ export function getAdminConfig(): AdminConfig {
       // Ensure at least one domain exists
       if (!parsed.domains || parsed.domains.length === 0) {
         parsed.domains = DEFAULT_CONFIG.domains;
+      }
+      // Migrate: fill in missing IMAP/SMTP fields on domains
+      let needsSave = false;
+      for (const d of parsed.domains) {
+        if (d.imapHost === undefined) {
+          d.imapHost = `mail.${d.domain}`;
+          d.imapPort = 993;
+          d.imapUser = `inbox@${d.domain}`;
+          d.imapPassword = '';
+          d.imapTls = true;
+          d.smtpHost = `mail.${d.domain}`;
+          d.smtpPort = 587;
+          d.smtpUser = `inbox@${d.domain}`;
+          d.smtpPassword = '';
+          d.smtpTls = true;
+          needsSave = true;
+        }
+      }
+      // Migrate: fill in missing service mail fields
+      if (!parsed.serviceMailEmail) {
+        parsed.serviceMailEmail = DEFAULT_CONFIG.serviceMailEmail;
+        parsed.serviceMailPassword = DEFAULT_CONFIG.serviceMailPassword;
+        needsSave = true;
+      }
+      if (needsSave) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
       }
       return parsed;
     }
@@ -171,7 +224,16 @@ export function toggleDomainActive(id: string): void {
   }
 }
 
-export function updateSettings(settings: Partial<Pick<AdminConfig, 'mailboxTTL' | 'maxMailboxes' | 'maxMessages' | 'guestMode' | 'adminEmail' | 'adminPassword' | 'createCode'>>): void {
+export function updateDomainSettings(id: string, settings: Partial<DomainConfig>): void {
+  const config = getAdminConfig();
+  const domain = config.domains.find(d => d.id === id);
+  if (domain) {
+    Object.assign(domain, settings);
+    saveAdminConfig(config);
+  }
+}
+
+export function updateSettings(settings: Partial<Pick<AdminConfig, 'mailboxTTL' | 'maxMailboxes' | 'maxMessages' | 'guestMode' | 'adminEmail' | 'adminPassword' | 'createCode' | 'serviceMailEmail' | 'serviceMailPassword'>>): void {
   const config = getAdminConfig();
   if (settings.mailboxTTL !== undefined) config.mailboxTTL = settings.mailboxTTL;
   if (settings.maxMailboxes !== undefined) config.maxMailboxes = settings.maxMailboxes;
@@ -180,6 +242,8 @@ export function updateSettings(settings: Partial<Pick<AdminConfig, 'mailboxTTL' 
   if (settings.adminEmail !== undefined) config.adminEmail = settings.adminEmail;
   if (settings.adminPassword !== undefined) config.adminPassword = settings.adminPassword;
   if (settings.createCode !== undefined) config.createCode = settings.createCode;
+  if (settings.serviceMailEmail !== undefined) config.serviceMailEmail = settings.serviceMailEmail;
+  if (settings.serviceMailPassword !== undefined) config.serviceMailPassword = settings.serviceMailPassword;
   saveAdminConfig(config);
 }
 
@@ -213,4 +277,30 @@ export function logoutAdmin(): void {
 export function validateCreateCode(code: string): boolean {
   const config = getAdminConfig();
   return code === config.createCode;
+}
+
+// ─── Service Mail Authentication ─────────────────────────────────────
+
+export function loginServiceMail(email: string, password: string): boolean {
+  const config = getAdminConfig();
+  if (email === config.serviceMailEmail && password === config.serviceMailPassword) {
+    sessionStorage.setItem(SMAIL_SESSION_KEY, JSON.stringify({ email, ts: Date.now() }));
+    return true;
+  }
+  return false;
+}
+
+export function isServiceMailLoggedIn(): boolean {
+  try {
+    const session = sessionStorage.getItem(SMAIL_SESSION_KEY);
+    if (!session) return false;
+    const data = JSON.parse(session);
+    return Date.now() - data.ts < 4 * 60 * 60 * 1000; // 4 hours
+  } catch {
+    return false;
+  }
+}
+
+export function logoutServiceMail(): void {
+  sessionStorage.removeItem(SMAIL_SESSION_KEY);
 }
