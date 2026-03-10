@@ -1,13 +1,13 @@
 /**
  * Service Hub - Temp Mail Page
  *
- * Connects to Mailcow IMAP via serverless API to fetch real emails.
- * Generates random addresses on the configured domain (catch-all).
+ * - No expiration — mailboxes persist until manually deleted
+ * - Messages filtered by TO address
+ * - Delete individual messages or entire mailbox
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import TempMailHeader from '../components/tempmail/TempMailHeader';
-import EmailGenerator from '../components/tempmail/EmailGenerator';
 import MailboxCard from '../components/tempmail/MailboxCard';
 import InboxList from '../components/tempmail/InboxList';
 import MessageView from '../components/tempmail/MessageView';
@@ -15,28 +15,27 @@ import SecurityNotice from '../components/SecurityNotice';
 import Footer from '../components/Footer';
 import Toast from '../components/Toast';
 import type { ToastData } from '../components/Toast';
-import type { TempMailbox, TempMessage, ExpiryOption } from '../services/tempmail-service';
+import type { TempMailbox, TempMessage } from '../services/tempmail-service';
 import {
   createMailbox,
-  getMailbox,
+  getAllMailboxes,
   refreshInbox,
   getInbox,
   getFullMessage,
   getUnreadCount,
   deleteMailbox,
+  deleteMessage,
 } from '../services/tempmail-service';
 
 function TempMailPage() {
   const [mailbox, setMailbox] = useState<TempMailbox | null>(null);
+  const [savedMailboxes, setSavedMailboxes] = useState<TempMailbox[]>([]);
   const [messages, setMessages] = useState<TempMessage[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<TempMessage | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const addToast = useCallback((message: string, type: ToastData['type'] = 'success') => {
@@ -48,128 +47,119 @@ function TempMailPage() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  // Load saved mailboxes on mount
+  useEffect(() => {
+    const saved = getAllMailboxes();
+    setSavedMailboxes(saved);
+    // Auto-select the first one if exists
+    if (saved.length > 0 && !mailbox) {
+      setMailbox(saved[0]);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Refresh inbox from IMAP
   const handleRefresh = useCallback(async (silent = false) => {
     if (!mailbox) return;
-    const mb = getMailbox(mailbox.id);
-    if (!mb || mb.status === 'expired') {
-      setMailbox(null);
-      setMessages([]);
-      setSelectedMessage(null);
-      if (!silent) addToast('Mailbox expired', 'info');
-      return;
-    }
-
     if (!silent) setIsRefreshing(true);
     try {
-      const freshMessages = await refreshInbox(mb.id);
+      const freshMessages = await refreshInbox(mailbox.id);
       setMessages(freshMessages);
-      setUnreadCount(getUnreadCount(mb.id));
-      if (!silent && freshMessages.length > 0) {
-        addToast(`${freshMessages.length} message(s) found`, 'success');
-      }
-    } catch (err) {
+      setUnreadCount(getUnreadCount(mailbox.id));
+    } catch {
       if (!silent) addToast('Failed to refresh inbox', 'error');
     }
     if (!silent) setIsRefreshing(false);
   }, [mailbox, addToast]);
 
+  // Auto-refresh every 10 seconds
+  useEffect(() => {
+    if (refreshRef.current) clearInterval(refreshRef.current);
+    if (!mailbox) return;
+    // Initial fetch
+    handleRefresh(true);
+    refreshRef.current = setInterval(() => handleRefresh(true), 10000);
+    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
+  }, [mailbox?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Generate new mailbox
-  const handleGenerate = useCallback(async (expiry: ExpiryOption) => {
+  const handleGenerate = useCallback(() => {
     setIsLoading(true);
-    setError(null);
     setSelectedMessage(null);
-
-    if (mailbox) deleteMailbox(mailbox.id);
-
     setTimeout(async () => {
-      const result = createMailbox(expiry);
+      const result = createMailbox();
       if (result.success && result.mailbox) {
         setMailbox(result.mailbox);
+        setSavedMailboxes(getAllMailboxes());
         addToast(`Inbox created: ${result.mailbox.email}`, 'success');
-        // Do initial refresh
         const msgs = await refreshInbox(result.mailbox.id);
         setMessages(msgs);
         setUnreadCount(getUnreadCount(result.mailbox.id));
-      } else {
-        setError(result.error || 'Failed to create mailbox');
       }
       setIsLoading(false);
-    }, 400);
-  }, [mailbox, addToast]);
+    }, 300);
+  }, [addToast]);
+
+  // Switch to a saved mailbox
+  const handleSelectMailbox = useCallback((mb: TempMailbox) => {
+    setMailbox(mb);
+    setSelectedMessage(null);
+    setMessages(getInbox(mb.id));
+  }, []);
 
   // Copy email
   const handleCopy = useCallback(() => {
     if (mailbox) {
       navigator.clipboard.writeText(mailbox.email).then(() => {
         addToast('Email address copied!', 'success');
-      }).catch(() => {
-        addToast('Failed to copy', 'error');
-      });
+      }).catch(() => addToast('Failed to copy', 'error'));
     }
   }, [mailbox, addToast]);
 
-  // Delete mailbox
-  const handleDelete = useCallback(() => {
+  // Delete entire mailbox
+  const handleDeleteMailbox = useCallback(() => {
     if (mailbox) {
       deleteMailbox(mailbox.id);
-      setMailbox(null);
-      setMessages([]);
+      setSavedMailboxes(getAllMailboxes());
+      const remaining = getAllMailboxes();
+      if (remaining.length > 0) {
+        setMailbox(remaining[0]);
+      } else {
+        setMailbox(null);
+        setMessages([]);
+      }
       setSelectedMessage(null);
       addToast('Inbox deleted', 'info');
     }
   }, [mailbox, addToast]);
 
-  // Select message — fetch full content from IMAP
+  // Delete single message
+  const handleDeleteMessage = useCallback(async (msg: TempMessage) => {
+    if (msg.uid && mailbox) {
+      const ok = await deleteMessage(msg.uid, mailbox.id);
+      if (ok) {
+        setMessages(getInbox(mailbox.id));
+        setUnreadCount(getUnreadCount(mailbox.id));
+        if (selectedMessage?.uid === msg.uid) setSelectedMessage(null);
+        addToast('Message deleted', 'info');
+      } else {
+        addToast('Failed to delete message', 'error');
+      }
+    }
+  }, [mailbox, selectedMessage, addToast]);
+
+  // Select message — fetch full content
   const handleSelectMessage = useCallback(async (msg: TempMessage) => {
     if (msg.uid && mailbox) {
       setIsRefreshing(true);
       const full = await getFullMessage(msg.uid, mailbox.id);
-      if (full) {
-        setSelectedMessage(full);
-        setMessages(getInbox(mailbox.id));
-        setUnreadCount(getUnreadCount(mailbox.id));
-      } else {
-        // Fallback: show what we have
-        setSelectedMessage(msg);
-      }
+      setSelectedMessage(full || msg);
+      setMessages(getInbox(mailbox.id));
+      setUnreadCount(getUnreadCount(mailbox.id));
       setIsRefreshing(false);
     } else {
       setSelectedMessage(msg);
     }
   }, [mailbox]);
-
-  // Expiry timer
-  useEffect(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    if (!mailbox) return;
-
-    const tick = () => {
-      const remaining = Math.max(0, Math.floor((mailbox.expiresAt - Date.now()) / 1000));
-      setTimeRemaining(remaining);
-      if (remaining <= 0) {
-        setMailbox(null);
-        setMessages([]);
-        setSelectedMessage(null);
-      }
-    };
-
-    tick();
-    intervalRef.current = setInterval(tick, 1000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [mailbox?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-refresh inbox every 10 seconds
-  useEffect(() => {
-    if (refreshRef.current) clearInterval(refreshRef.current);
-    if (!mailbox) return;
-
-    refreshRef.current = setInterval(() => {
-      handleRefresh(true); // silent refresh
-    }, 10000);
-
-    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
-  }, [mailbox?.id, handleRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen relative">
@@ -180,30 +170,61 @@ function TempMailPage() {
         <div className="w-full max-w-2xl">
           <TempMailHeader />
 
-          {/* Generator (when no mailbox) */}
-          {!mailbox && (
-            <EmailGenerator
-              onGenerate={handleGenerate}
-              isLoading={isLoading}
-              error={error}
-            />
-          )}
+          {/* Saved mailboxes quick-switch + generate */}
+          <div className="glass-card p-4 sm:p-5 mb-4 animate-fade-in-up" style={{ animationDelay: '0.1s', opacity: 0 }}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">Your Inboxes</h2>
+              <button
+                onClick={handleGenerate}
+                disabled={isLoading}
+                className="btn-primary !py-2 !px-4 !text-xs !rounded-xl"
+              >
+                {isLoading ? (
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
+                New Inbox
+              </button>
+            </div>
+
+            {savedMailboxes.length === 0 ? (
+              <p className="text-white/15 text-xs text-center py-4">No inboxes yet. Click "New Inbox" to create one.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {savedMailboxes.map(mb => (
+                  <button
+                    key={mb.id}
+                    onClick={() => handleSelectMailbox(mb)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-mono transition-all border ${
+                      mailbox?.id === mb.id
+                        ? 'bg-violet-500/15 text-violet-300 border-violet-500/25'
+                        : 'bg-white/[0.02] text-white/30 border-white/[0.06] hover:bg-white/[0.04] hover:text-white/50'
+                    }`}
+                  >
+                    {mb.email.split('@')[0]}@…
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Active mailbox */}
           {mailbox && (
             <div className="space-y-4">
               <MailboxCard
                 mailbox={mailbox}
-                timeRemaining={timeRemaining}
                 unreadCount={unreadCount}
                 onCopy={handleCopy}
                 onRefresh={() => handleRefresh(false)}
-                onDelete={handleDelete}
-                onRegenerate={() => handleGenerate(30)}
+                onDelete={handleDeleteMailbox}
+                onRegenerate={handleGenerate}
               />
 
               {/* Inbox / Message view */}
-              <div className="glass-card p-5 sm:p-6 animate-fade-in-up" style={{ animationDelay: '0.25s', opacity: 0 }}>
+              <div className="glass-card p-5 sm:p-6 animate-fade-in-up" style={{ animationDelay: '0.2s', opacity: 0 }}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest">
                     {selectedMessage ? 'Message' : 'Inbox'}
@@ -221,10 +242,25 @@ function TempMailPage() {
                 </div>
 
                 {selectedMessage ? (
-                  <MessageView
-                    message={selectedMessage}
-                    onBack={() => setSelectedMessage(null)}
-                  />
+                  <div>
+                    <MessageView
+                      message={selectedMessage}
+                      onBack={() => setSelectedMessage(null)}
+                    />
+                    {/* Delete this message */}
+                    <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                      <button
+                        onClick={() => handleDeleteMessage(selectedMessage)}
+                        className="btn-danger !py-2 !px-4 !text-xs"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete Message
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <InboxList
                     messages={messages}

@@ -40,8 +40,7 @@ async function withImap(callback) {
 
 /**
  * Fetches emails for a specific recipient address from INBOX.
- * If the TO search finds nothing, falls back to fetching all recent emails
- * (Mailcow catch-all may rewrite the To header to the real inbox).
+ * Strictly filters by TO header — only returns emails sent to this address.
  */
 async function fetchEmailsForAddress(address, limit = 20) {
   return withImap(async (client) => {
@@ -49,13 +48,8 @@ async function fetchEmailsForAddress(address, limit = 20) {
     try {
       const messages = [];
 
-      // Try searching by TO first
-      let searchResults = await client.search({ to: address });
-
-      // Fallback: if no results, get ALL recent messages from INBOX
-      if (!searchResults || searchResults.length === 0) {
-        searchResults = await client.search({ all: true });
-      }
+      // Search ONLY by TO — each temp address sees only its own messages
+      const searchResults = await client.search({ to: address });
 
       if (!searchResults || searchResults.length === 0) {
         return [];
@@ -74,18 +68,13 @@ async function fetchEmailsForAddress(address, limit = 20) {
           });
 
           if (msg && msg.envelope) {
-            // Get the To address from envelope (might be the real inbox address)
-            const toAddr = msg.envelope.to && msg.envelope.to[0]
-              ? msg.envelope.to[0].address || address
-              : address;
-
             messages.push({
               uid: msg.uid,
               subject: msg.envelope.subject || '(No subject)',
               from: msg.envelope.from && msg.envelope.from[0]
                 ? `${msg.envelope.from[0].name || ''} <${msg.envelope.from[0].address || ''}>`
                 : 'Unknown',
-              to: toAddr,
+              to: address,
               date: msg.envelope.date ? new Date(msg.envelope.date).getTime() : Date.now(),
               isRead: msg.flags ? msg.flags.has('\\Seen') : false,
               size: msg.size || 0,
@@ -141,4 +130,41 @@ async function fetchMessageByUid(uid) {
   });
 }
 
-export { withImap, fetchEmailsForAddress, fetchMessageByUid, IMAP_CONFIG };
+/**
+ * Deletes a specific message by UID.
+ */
+async function deleteMessageByUid(uid) {
+  return withImap(async (client) => {
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      await client.messageDelete(uid);
+      return true;
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
+ * Deletes ALL messages in the INBOX (admin purge).
+ */
+async function purgeAllMessages() {
+  return withImap(async (client) => {
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      const all = await client.search({ all: true });
+      if (all && all.length > 0) {
+        for (const uid of all) {
+          try {
+            await client.messageDelete(uid);
+          } catch { /* skip */ }
+        }
+      }
+      return all ? all.length : 0;
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+export { withImap, fetchEmailsForAddress, fetchMessageByUid, deleteMessageByUid, purgeAllMessages, IMAP_CONFIG };

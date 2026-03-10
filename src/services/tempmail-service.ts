@@ -1,14 +1,13 @@
 /**
- * Temp Mail Service — Connects to Mailcow via API proxy.
+ * Temp Mail Service — Connects to Mailcow via IMAP API.
  *
- * Uses Vercel serverless functions at /api/mail/* which connect to
- * the Mailcow IMAP server. The catch-all inbox receives all emails
- * for *@servicehub-mail.cloud.
- *
- * Fallback: if the API is unavailable, simulates demo emails.
+ * - No expiration: mailboxes persist forever until manually deleted
+ * - Mailbox list stored in localStorage for persistence
+ * - Messages filtered by TO address (each temp email sees only its own)
+ * - Delete individual messages or entire mailbox
  */
 
-import { getPrimaryDomain, getAdminConfig } from './domain-config';
+import { getPrimaryDomain } from './domain-config';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -16,8 +15,6 @@ export interface TempMailbox {
   id: string;
   email: string;
   createdAt: number;
-  expiresAt: number;
-  status: 'active' | 'expired';
 }
 
 export interface TempMessage {
@@ -31,30 +28,25 @@ export interface TempMessage {
   snippet: string;
   receivedAt: number;
   isRead: boolean;
-  uid?: number; // IMAP UID for fetching full message
+  uid?: number;
 }
 
-export type ExpiryOption = 10 | 30 | 60 | 1440; // minutes
+// ─── localStorage persistence ──────────────────────────────────────
 
-// ─── Config ────────────────────────────────────────────────────────
+const STORAGE_KEY = 'servicehub_mailboxes';
 
-function getDomain(): string {
-  return getPrimaryDomain();
+function loadMailboxes(): TempMailbox[] {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
 }
 
-function getMaxMailboxes(): number {
-  return getAdminConfig().maxMailboxes || 5;
+function saveMailboxes(mailboxes: TempMailbox[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(mailboxes));
 }
-
-// Rate-limit: max 5 mailbox creations per 10 minutes
-const RATE_LIMIT_WINDOW = 10 * 60 * 1000;
-const RATE_LIMIT_MAX = 5;
-
-// ─── In-Memory State ──────────────────────────────────────────────
-
-let mailboxes: TempMailbox[] = [];
-let cachedMessages: Record<string, TempMessage[]> = {}; // mailboxId -> messages
-let creationTimestamps: number[] = [];
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -67,33 +59,24 @@ function generateEmailAddress(): string {
   const prefix = Array.from({ length: 8 }, () =>
     chars[Math.floor(Math.random() * chars.length)]
   ).join('');
-  return `${prefix}@${getDomain()}`;
+  return `${prefix}@${getPrimaryDomain()}`;
 }
 
-function checkRateLimit(): boolean {
-  const now = Date.now();
-  creationTimestamps = creationTimestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
-  return creationTimestamps.length < RATE_LIMIT_MAX;
-}
+// ─── Cached messages (in-memory per session) ───────────────────────
+
+let cachedMessages: Record<string, TempMessage[]> = {};
 
 // ─── IMAP API Calls ───────────────────────────────────────────────
 
-/**
- * Fetches inbox from the IMAP API endpoint.
- * Falls back to empty array if API is unavailable.
- */
 async function fetchInboxFromAPI(address: string): Promise<TempMessage[]> {
   try {
     const res = await fetch(`/api/mail/inbox?address=${encodeURIComponent(address)}`);
-    if (!res.ok) {
-      console.warn('IMAP API returned', res.status);
-      return [];
-    }
+    if (!res.ok) return [];
     const data = await res.json();
     if (data.success && Array.isArray(data.messages)) {
       return data.messages.map((msg: any) => ({
         id: String(msg.uid),
-        mailboxId: '', // filled by caller
+        mailboxId: '',
         from: msg.from || 'Unknown',
         to: msg.to || address,
         subject: msg.subject || '(No subject)',
@@ -106,15 +89,11 @@ async function fetchInboxFromAPI(address: string): Promise<TempMessage[]> {
       }));
     }
     return [];
-  } catch (err) {
-    console.warn('IMAP API unavailable:', err);
+  } catch {
     return [];
   }
 }
 
-/**
- * Fetches a full message from the IMAP API endpoint.
- */
 async function fetchMessageFromAPI(uid: number): Promise<TempMessage | null> {
   try {
     const res = await fetch(`/api/mail/message?uid=${uid}`);
@@ -141,61 +120,59 @@ async function fetchMessageFromAPI(uid: number): Promise<TempMessage | null> {
   }
 }
 
+async function deleteMessageFromAPI(uid: number): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/mail/delete?uid=${uid}`, { method: 'DELETE' });
+    const data = await res.json();
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function purgeAllFromAPI(): Promise<number> {
+  try {
+    const res = await fetch('/api/mail/purge', { method: 'DELETE' });
+    const data = await res.json();
+    return data.deleted || 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ─── Public API ────────────────────────────────────────────────────
 
-export function createMailbox(expiryMinutes: ExpiryOption = 30): {
+export function createMailbox(): {
   success: boolean;
   mailbox?: TempMailbox;
   error?: string;
 } {
-  if (!checkRateLimit()) {
-    return { success: false, error: 'Rate limit exceeded. Please wait before creating a new mailbox.' };
-  }
-
-  const maxMb = getMaxMailboxes();
-  const activeMailboxes = mailboxes.filter(m => m.status === 'active' && Date.now() < m.expiresAt);
-  if (activeMailboxes.length >= maxMb) {
-    cleanupExpired();
-    const stillActive = mailboxes.filter(m => m.status === 'active' && Date.now() < m.expiresAt);
-    if (stillActive.length >= maxMb) {
-      return { success: false, error: 'Maximum mailbox limit reached. Delete an existing mailbox first.' };
-    }
-  }
-
-  const now = Date.now();
   const mailbox: TempMailbox = {
     id: generateId(),
     email: generateEmailAddress(),
-    createdAt: now,
-    expiresAt: now + expiryMinutes * 60 * 1000,
-    status: 'active',
+    createdAt: Date.now(),
   };
 
+  const mailboxes = loadMailboxes();
   mailboxes.push(mailbox);
-  creationTimestamps.push(now);
+  saveMailboxes(mailboxes);
   cachedMessages[mailbox.id] = [];
 
   return { success: true, mailbox };
 }
 
-export function getMailbox(mailboxId: string): TempMailbox | null {
-  const mb = mailboxes.find(m => m.id === mailboxId);
-  if (!mb) return null;
-  if (Date.now() > mb.expiresAt) {
-    mb.status = 'expired';
-  }
-  return mb;
+export function getAllMailboxes(): TempMailbox[] {
+  return loadMailboxes();
 }
 
-/**
- * Refreshes inbox by calling the IMAP API.
- */
-export async function refreshInbox(mailboxId: string): Promise<TempMessage[]> {
-  const mb = mailboxes.find(m => m.id === mailboxId);
-  if (!mb) return [];
+export function getMailbox(mailboxId: string): TempMailbox | null {
+  return loadMailboxes().find(m => m.id === mailboxId) || null;
+}
 
+export async function refreshInbox(mailboxId: string): Promise<TempMessage[]> {
+  const mb = getMailbox(mailboxId);
+  if (!mb) return [];
   const messages = await fetchInboxFromAPI(mb.email);
-  // Tag messages with mailbox ID
   const tagged = messages.map(m => ({ ...m, mailboxId }));
   cachedMessages[mailboxId] = tagged;
   return tagged;
@@ -205,54 +182,33 @@ export function getInbox(mailboxId: string): TempMessage[] {
   return cachedMessages[mailboxId] || [];
 }
 
-/**
- * Gets full message content via IMAP API.
- */
 export async function getFullMessage(uid: number, mailboxId: string): Promise<TempMessage | null> {
   const msg = await fetchMessageFromAPI(uid);
   if (msg) {
     msg.mailboxId = mailboxId;
-    // Update cache
     const cached = cachedMessages[mailboxId];
     if (cached) {
       const idx = cached.findIndex(m => m.uid === uid);
-      if (idx !== -1) {
-        cached[idx] = { ...cached[idx], ...msg, isRead: true };
-      }
+      if (idx !== -1) cached[idx] = { ...cached[idx], ...msg, isRead: true };
     }
   }
   return msg;
 }
 
-export function getUnreadCount(mailboxId: string): number {
-  return (cachedMessages[mailboxId] || []).filter(m => !m.isRead).length;
+export async function deleteMessage(uid: number, mailboxId: string): Promise<boolean> {
+  const ok = await deleteMessageFromAPI(uid);
+  if (ok && cachedMessages[mailboxId]) {
+    cachedMessages[mailboxId] = cachedMessages[mailboxId].filter(m => m.uid !== uid);
+  }
+  return ok;
 }
 
 export function deleteMailbox(mailboxId: string): void {
-  mailboxes = mailboxes.filter(m => m.id !== mailboxId);
+  const mailboxes = loadMailboxes().filter(m => m.id !== mailboxId);
+  saveMailboxes(mailboxes);
   delete cachedMessages[mailboxId];
 }
 
-export function getAllMailboxes(): TempMailbox[] {
-  cleanupExpired();
-  return mailboxes.filter(m => m.status === 'active' && Date.now() < m.expiresAt);
+export function getUnreadCount(mailboxId: string): number {
+  return (cachedMessages[mailboxId] || []).filter(m => !m.isRead).length;
 }
-
-export function cleanupExpired(): void {
-  const now = Date.now();
-  const expired = mailboxes.filter(m => now > m.expiresAt);
-  expired.forEach(m => {
-    m.status = 'expired';
-    delete cachedMessages[m.id];
-  });
-  mailboxes = mailboxes.filter(m => m.status === 'active');
-}
-
-export const EXPIRY_OPTIONS: { label: string; value: ExpiryOption }[] = [
-  { label: '10 minutes', value: 10 },
-  { label: '30 minutes', value: 30 },
-  { label: '1 hour', value: 60 },
-  { label: '24 hours', value: 1440 },
-];
-
-export { getDomain };

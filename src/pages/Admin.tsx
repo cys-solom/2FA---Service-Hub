@@ -16,6 +16,7 @@ import {
   toggleDomainActive,
   updateSettings,
 } from '../services/domain-config';
+import { purgeAllFromAPI } from '../services/tempmail-service';
 
 function AdminPage() {
   const [config, setConfig] = useState<AdminConfig>(getAdminConfig());
@@ -268,6 +269,35 @@ function AdminPage() {
                   your actual values after setting up the mail server.
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* ── Danger Zone ─────────────────────────────────────── */}
+          <div className="glass-card p-6 sm:p-8 animate-fade-in-up border-red-500/10" style={{ animationDelay: '0.35s', opacity: 0 }}>
+            <h2 className="text-xs font-semibold text-red-400/60 uppercase tracking-widest mb-5">
+              Danger Zone
+            </h2>
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-white/60 font-medium">Purge all messages</p>
+                <p className="text-[11px] text-white/20 mt-0.5">Delete ALL emails from the IMAP inbox for all temp addresses</p>
+              </div>
+              <button
+                onClick={async () => {
+                  if (confirm('Are you sure? This will permanently delete ALL emails from the mail server.')) {
+                    const count = await purgeAllFromAPI();
+                    addToast(`Purged ${count} message(s) from server`, 'info');
+                  }
+                }}
+                className="btn-danger !py-2 !px-4 !text-xs flex-shrink-0"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Purge All
+              </button>
             </div>
           </div>
 
