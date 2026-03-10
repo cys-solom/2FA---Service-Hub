@@ -14,8 +14,13 @@ function formatDate(timestamp: number): string {
   });
 }
 
+function senderInitial(from: string): string {
+  const match = from.match(/^(.+?)\s*</);
+  const name = match ? match[1].replace(/"/g, '').trim() : from.split('@')[0];
+  return name.charAt(0).toUpperCase();
+}
+
 const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
-  // Sanitize HTML for safe rendering
   const safeHtml = useMemo(() => {
     if (!message.htmlBody) return null;
     return DOMPurify.sanitize(message.htmlBody, {
@@ -36,33 +41,47 @@ const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
   }, [message.htmlBody]);
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-slide-right">
       {/* Back button */}
       <button
         onClick={onBack}
-        className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors mb-4 group"
+        className="flex items-center gap-1.5 text-xs text-white/25 hover:text-white/50 transition-all mb-5 group"
       >
-        <svg className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
-        Back to inbox
+        <span className="font-medium">Back</span>
       </button>
 
       {/* Message header */}
-      <div className="space-y-3 mb-5 pb-5 border-b border-white/[0.06]">
-        <h2 className="text-base font-semibold text-white leading-snug">
-          {message.subject || '(No subject)'}
-        </h2>
+      <div className="space-y-4 mb-5 pb-5 border-b border-white/[0.05]">
+        <div className="flex items-start gap-3">
+          {/* Sender avatar */}
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/15">
+            <span className="text-white text-xs font-bold">{senderInitial(message.from)}</span>
+          </div>
 
-        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-          <span className="text-white/25 font-medium">From</span>
-          <span className="text-white/50 truncate">{message.from}</span>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-white/90 leading-snug mb-1">
+              {message.subject || '(No subject)'}
+            </h2>
+            <p className="text-xs text-white/30 truncate">{message.from}</p>
+          </div>
+        </div>
 
-          <span className="text-white/25 font-medium">To</span>
-          <span className="text-white/50 truncate font-mono text-[11px]">{message.to}</span>
-
-          <span className="text-white/25 font-medium">Date</span>
-          <span className="text-white/50 tabular-nums">{formatDate(message.receivedAt)}</span>
+        <div className="flex items-center gap-4 text-[10px] text-white/15 ml-12">
+          <div className="flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+            </svg>
+            <span className="font-mono truncate max-w-[160px]">{message.to}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="tabular-nums">{formatDate(message.receivedAt)}</span>
+          </div>
         </div>
       </div>
 
@@ -70,11 +89,11 @@ const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
       <div className="email-body">
         {safeHtml ? (
           <div
-            className="text-sm text-white/60 leading-relaxed [&_a]:text-violet-400 [&_a]:underline [&_a:hover]:text-violet-300 [&_strong]:text-white/80 [&_h2]:text-white/80 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-3 [&_p]:mb-2 [&_hr]:border-white/[0.06] [&_hr]:my-4"
+            className="text-sm text-white/55 leading-relaxed [&_a]:text-violet-400 [&_a]:underline [&_a:hover]:text-violet-300 [&_strong]:text-white/75 [&_b]:text-white/75 [&_h1]:text-white/80 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-white/75 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-white/70 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:mb-2 [&_hr]:border-white/[0.05] [&_hr]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-violet-500/30 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-white/40 [&_code]:bg-white/[0.05] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono"
             dangerouslySetInnerHTML={{ __html: safeHtml }}
           />
         ) : (
-          <pre className="text-sm text-white/50 leading-relaxed whitespace-pre-wrap font-sans">
+          <pre className="text-sm text-white/45 leading-relaxed whitespace-pre-wrap font-sans">
             {message.textBody || 'No content'}
           </pre>
         )}

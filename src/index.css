@@ -19,39 +19,66 @@
   ::-webkit-scrollbar-thumb {
     @apply bg-white/10 rounded-full;
   }
+
+  ::selection {
+    background: rgba(139, 92, 246, 0.3);
+    color: #f5f3ff;
+  }
 }
 
 @layer components {
   .glass-card {
-    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
-    @apply backdrop-blur-2xl border border-white/[0.08] rounded-3xl shadow-2xl;
+    background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+    @apply backdrop-blur-2xl border border-white/[0.06] rounded-2xl shadow-2xl;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+  .glass-card-hover:hover {
+    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+    border-color: rgba(255,255,255,0.1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.06);
+    transform: translateY(-1px);
   }
 
   .input-field {
-    @apply w-full bg-white/[0.04] border border-white/[0.08] rounded-2xl px-5 py-4 text-white 
-           placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-violet-500/40 
-           focus:border-violet-500/30 transition-all duration-300;
+    @apply w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-4 py-3 text-white 
+           placeholder-white/15 focus:outline-none focus:ring-2 focus:ring-violet-500/30 
+           focus:border-violet-500/25 transition-all duration-300;
+    backdrop-filter: blur(8px);
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-2xl 
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl 
            font-semibold text-sm transition-all duration-300 focus:outline-none 
-           active:scale-[0.97];
+           active:scale-[0.97] cursor-pointer;
   }
 
   .btn-primary {
-    @apply btn text-white shadow-xl
-           hover:shadow-violet-500/30 hover:scale-[1.02];
+    @apply btn text-white shadow-lg;
     background: linear-gradient(135deg, #7c3aed 0%, #6366f1 50%, #818cf8 100%);
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.25), 0 0 0 1px rgba(124, 58, 237, 0.15);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 6px 24px rgba(124, 58, 237, 0.35), 0 0 0 1px rgba(124, 58, 237, 0.25);
+    transform: translateY(-1px);
   }
 
   .btn-danger {
-    @apply btn bg-white/[0.04] text-red-300/80 border border-white/[0.06]
-           hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-300;
+    @apply btn bg-white/[0.03] text-red-300/70 border border-white/[0.06];
+  }
+  .btn-danger:hover {
+    @apply bg-red-500/10 border-red-500/20 text-red-300;
+  }
+
+  .btn-ghost {
+    @apply btn text-white/30 bg-transparent hover:text-white/60 hover:bg-white/[0.05];
   }
 }
 
-/* Animated background */
+/* ─── Animated background ─────────────────────────────────────────── */
 .bg-glow {
   position: fixed;
   inset: 0;
@@ -63,25 +90,42 @@
 .bg-glow::before {
   content: '';
   position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle at 30% 20%, rgba(124, 58, 237, 0.12) 0%, transparent 50%),
-              radial-gradient(circle at 70% 80%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-              radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
-  animation: bgFloat 20s ease-in-out infinite;
+  top: -60%;
+  left: -60%;
+  width: 220%;
+  height: 220%;
+  background: radial-gradient(ellipse at 25% 15%, rgba(124, 58, 237, 0.10) 0%, transparent 50%),
+              radial-gradient(ellipse at 75% 85%, rgba(99, 102, 241, 0.07) 0%, transparent 50%),
+              radial-gradient(ellipse at 50% 40%, rgba(167, 139, 250, 0.04) 0%, transparent 60%);
+  animation: bgFloat 25s ease-in-out infinite;
+}
+
+.bg-glow::after {
+  content: '';
+  position: absolute;
+  top: 10%;
+  right: -5%;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.06) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: orbFloat 15s ease-in-out infinite;
 }
 
 @keyframes bgFloat {
   0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  33% { transform: translate(2%, -2%) rotate(1deg); }
-  66% { transform: translate(-1%, 1%) rotate(-0.5deg); }
+  33% { transform: translate(3%, -3%) rotate(1deg); }
+  66% { transform: translate(-2%, 2%) rotate(-0.5deg); }
 }
 
-/* Animations */
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  50% { transform: translate(-30px, 40px) scale(1.2); opacity: 1; }
+}
+
+/* ─── Animations ──────────────────────────────────────────────────── */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(24px); }
+  from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -91,18 +135,18 @@
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.9); }
+  from { opacity: 0; transform: scale(0.92); }
   to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes toastSlideIn {
-  from { opacity: 0; transform: translateY(20px) scale(0.9); }
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes toastSlideOut {
   from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(-12px) scale(0.9); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.95); }
 }
 
 @keyframes shimmer {
@@ -112,48 +156,56 @@
 
 @keyframes pulse-ring {
   0% { transform: scale(1); opacity: 0.3; }
-  50% { transform: scale(1.05); opacity: 0.1; }
+  50% { transform: scale(1.08); opacity: 0.1; }
   100% { transform: scale(1); opacity: 0.3; }
 }
 
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 .animate-fade-in-up {
-  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
+  animation: fadeIn 0.3s ease-out forwards;
 }
 
 .animate-scale-in {
-  animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-right {
+  animation: slideRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-toast-in {
-  animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-toast-out {
-  animation: toastSlideOut 0.25s ease-in forwards;
+  animation: toastSlideOut 0.2s ease-in forwards;
 }
 
-/* Code display glow */
+/* ─── Code display glow ───────────────────────────────────────────── */
 .code-glow {
   text-shadow: 0 0 40px rgba(139, 92, 246, 0.4),
                0 0 80px rgba(139, 92, 246, 0.2),
                0 0 120px rgba(139, 92, 246, 0.1);
 }
 
-/* Timer ring */
+/* ─── Timer ring ──────────────────────────────────────────────────── */
 .timer-ring {
   transform: rotate(-90deg);
   filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
 }
-
 .timer-ring-progress {
   transition: stroke-dashoffset 1s linear;
 }
 
-/* Shimmer text effect */
+/* ─── Shimmer text effect ─────────────────────────────────────────── */
 .shimmer-text {
   background: linear-gradient(90deg, #c4b5fd 0%, #f0abfc 25%, #c4b5fd 50%, #93c5fd 75%, #c4b5fd 100%);
   background-size: 200% auto;
@@ -163,15 +215,15 @@
   animation: shimmer 6s linear infinite;
 }
 
-/* Grid pattern overlay */
+/* ─── Grid pattern overlay ────────────────────────────────────────── */
 .grid-pattern {
   background-image: 
-    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-  background-size: 60px 60px;
+    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+  background-size: 64px 64px;
 }
 
-/* Custom scrollbar for inbox */
+/* ─── Custom scrollbar ────────────────────────────────────────────── */
 .custom-scrollbar::-webkit-scrollbar {
   width: 3px;
 }
@@ -179,11 +231,11 @@
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.2);
+  background: rgba(139, 92, 246, 0.15);
   border-radius: 99px;
 }
 
-/* Select dropdown styling */
+/* ─── Select dropdown ─────────────────────────────────────────────── */
 select.input-field {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   background-position: right 0.75rem center;
@@ -191,9 +243,42 @@ select.input-field {
   background-size: 1.25em 1.25em;
   padding-right: 2.5rem;
 }
-
 select.input-field option {
   background: #1a1a2e;
   color: #e2e8f0;
 }
 
+/* ─── Email message body ──────────────────────────────────────────── */
+.email-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.email-body table {
+  border-collapse: collapse;
+  max-width: 100%;
+}
+.email-body td, .email-body th {
+  padding: 4px 8px;
+}
+
+/* ─── Message item hover effect ───────────────────────────────────── */
+.msg-item {
+  position: relative;
+  overflow: hidden;
+}
+.msg-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, #7c3aed, #818cf8);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.msg-item:hover::before,
+.msg-item.active::before {
+  opacity: 1;
+}
