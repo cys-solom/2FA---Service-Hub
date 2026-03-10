@@ -5,7 +5,8 @@
  * Uses the catch-all approach: all emails to *@domain go to one inbox.
  */
 
-const { ImapFlow } = require('imapflow');
+import { ImapFlow } from 'imapflow';
+import { simpleParser } from 'mailparser';
 
 const IMAP_CONFIG = {
   host: process.env.IMAP_HOST || 'mail.servicehub-mail.cloud',
@@ -15,12 +16,14 @@ const IMAP_CONFIG = {
     user: process.env.IMAP_USER || 'inbox@servicehub-mail.cloud',
     pass: process.env.IMAP_PASS || '',
   },
+  tls: {
+    rejectUnauthorized: false, // Allow Mailcow self-signed certs
+  },
   logger: false,
 };
 
 /**
  * Executes a callback with an authenticated IMAP connection.
- * Automatically handles connect/disconnect.
  */
 async function withImap(callback) {
   const client = new ImapFlow(IMAP_CONFIG);
@@ -37,7 +40,8 @@ async function withImap(callback) {
 
 /**
  * Fetches emails for a specific recipient address from INBOX.
- * Uses IMAP SEARCH to filter by the TO header.
+ * If the TO search finds nothing, falls back to fetching all recent emails
+ * (Mailcow catch-all may rewrite the To header to the real inbox).
  */
 async function fetchEmailsForAddress(address, limit = 20) {
   return withImap(async (client) => {
@@ -45,16 +49,19 @@ async function fetchEmailsForAddress(address, limit = 20) {
     try {
       const messages = [];
 
-      // Search for emails sent TO this specific address
-      const searchResults = await client.search({
-        to: address,
-      });
+      // Try searching by TO first
+      let searchResults = await client.search({ to: address });
+
+      // Fallback: if no results, get ALL recent messages from INBOX
+      if (!searchResults || searchResults.length === 0) {
+        searchResults = await client.search({ all: true });
+      }
 
       if (!searchResults || searchResults.length === 0) {
         return [];
       }
 
-      // Get the most recent ones (last N)
+      // Get the most recent ones
       const uids = searchResults.slice(-limit);
 
       for (const uid of uids) {
@@ -62,19 +69,23 @@ async function fetchEmailsForAddress(address, limit = 20) {
           const msg = await client.fetchOne(uid, {
             uid: true,
             envelope: true,
-            bodyStructure: true,
             flags: true,
             size: true,
           });
 
           if (msg && msg.envelope) {
+            // Get the To address from envelope (might be the real inbox address)
+            const toAddr = msg.envelope.to && msg.envelope.to[0]
+              ? msg.envelope.to[0].address || address
+              : address;
+
             messages.push({
               uid: msg.uid,
               subject: msg.envelope.subject || '(No subject)',
               from: msg.envelope.from && msg.envelope.from[0]
                 ? `${msg.envelope.from[0].name || ''} <${msg.envelope.from[0].address || ''}>`
                 : 'Unknown',
-              to: address,
+              to: toAddr,
               date: msg.envelope.date ? new Date(msg.envelope.date).getTime() : Date.now(),
               isRead: msg.flags ? msg.flags.has('\\Seen') : false,
               size: msg.size || 0,
@@ -85,7 +96,6 @@ async function fetchEmailsForAddress(address, limit = 20) {
         }
       }
 
-      // Sort newest first
       return messages.sort((a, b) => b.date - a.date);
     } finally {
       lock.release();
@@ -113,7 +123,6 @@ async function fetchMessageByUid(uid) {
       await client.messageFlagsAdd(uid, ['\\Seen']);
 
       // Parse the raw email source
-      const { simpleParser } = require('mailparser');
       const parsed = await simpleParser(msg.source);
 
       return {
@@ -132,4 +141,4 @@ async function fetchMessageByUid(uid) {
   });
 }
 
-module.exports = { withImap, fetchEmailsForAddress, fetchMessageByUid, IMAP_CONFIG };
+export { withImap, fetchEmailsForAddress, fetchMessageByUid, IMAP_CONFIG };
