@@ -1,13 +1,11 @@
 /**
- * Temp Mail Service — Client-side demo mode.
+ * Temp Mail Service — Connects to Mailcow via API proxy.
  *
- * In production, this would call your backend API.
- * For demo / local use, everything runs in-memory.
+ * Uses Vercel serverless functions at /api/mail/* which connect to
+ * the Mailcow IMAP server. The catch-all inbox receives all emails
+ * for *@servicehub-mail.cloud.
  *
- * Architecture:
- *   - Each mailbox is identified by a unique ID & email address
- *   - Mailboxes auto-expire based on selected TTL
- *   - Messages are simulated for demo; in production they arrive via webhook
+ * Fallback: if the API is unavailable, simulates demo emails.
  */
 
 import { getPrimaryDomain, getAdminConfig } from './domain-config';
@@ -33,11 +31,12 @@ export interface TempMessage {
   snippet: string;
   receivedAt: number;
   isRead: boolean;
+  uid?: number; // IMAP UID for fetching full message
 }
 
 export type ExpiryOption = 10 | 30 | 60 | 1440; // minutes
 
-// ─── Config (reads from admin settings) ───────────────────────────
+// ─── Config ────────────────────────────────────────────────────────
 
 function getDomain(): string {
   return getPrimaryDomain();
@@ -47,20 +46,15 @@ function getMaxMailboxes(): number {
   return getAdminConfig().maxMailboxes || 5;
 }
 
-function getMaxMessages(): number {
-  return getAdminConfig().maxMessages || 50;
-}
-
 // Rate-limit: max 5 mailbox creations per 10 minutes
 const RATE_LIMIT_WINDOW = 10 * 60 * 1000;
 const RATE_LIMIT_MAX = 5;
 
-// ─── In-Memory Storage (demo mode) ────────────────────────────────
+// ─── In-Memory State ──────────────────────────────────────────────
 
 let mailboxes: TempMailbox[] = [];
-let messages: TempMessage[] = [];
+let cachedMessages: Record<string, TempMessage[]> = {}; // mailboxId -> messages
 let creationTimestamps: number[] = [];
-let demoIntervals: Record<string, ReturnType<typeof setInterval>> = {};
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -82,106 +76,69 @@ function checkRateLimit(): boolean {
   return creationTimestamps.length < RATE_LIMIT_MAX;
 }
 
-// ─── Demo email simulation ────────────────────────────────────────
+// ─── IMAP API Calls ───────────────────────────────────────────────
 
-const DEMO_SENDERS = [
-  { name: 'Google', email: 'noreply@google.com' },
-  { name: 'GitHub', email: 'noreply@github.com' },
-  { name: 'ChatGPT', email: 'noreply@openai.com' },
-  { name: 'Discord', email: 'noreply@discord.com' },
-  { name: 'Adobe', email: 'noreply@adobe.com' },
-  { name: 'Vercel', email: 'noreply@vercel.com' },
-];
-
-const DEMO_SUBJECTS = [
-  { subject: 'Verify your email address', body: 'Please click the link below to verify your email address. This link will expire in 24 hours.' },
-  { subject: 'Your verification code is 847291', body: 'Use the following code to complete your sign-up: <strong>847291</strong>. This code expires in 10 minutes.' },
-  { subject: 'Welcome to the platform!', body: 'Thank you for signing up! Your account has been created successfully. Get started by completing your profile.' },
-  { subject: 'Password reset request', body: 'We received a request to reset your password. If you did not make this request, you can ignore this email.' },
-  { subject: 'Security alert: New sign-in', body: 'A new sign-in was detected on your account from a new device. If this was you, no action is needed.' },
-  { subject: 'Two-factor authentication enabled', body: 'Two-factor authentication has been successfully enabled on your account. Keep your recovery codes safe.' },
-];
-
-function generateDemoMessage(mailboxId: string, email: string): TempMessage {
-  const sender = DEMO_SENDERS[Math.floor(Math.random() * DEMO_SENDERS.length)];
-  const template = DEMO_SUBJECTS[Math.floor(Math.random() * DEMO_SUBJECTS.length)];
-
-  const htmlBody = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1a1a2e; padding: 30px; border-radius: 12px;">
-        <h2 style="color: #e2e8f0; margin-bottom: 20px;">${template.subject}</h2>
-        <p style="color: #a0aec0; line-height: 1.6;">${template.body}</p>
-        <hr style="border: none; border-top: 1px solid #2d2d44; margin: 20px 0;" />
-        <p style="color: #718096; font-size: 12px;">
-          This email was sent to ${email}. If you did not request this, please ignore it.
-        </p>
-      </div>
-    </div>
-  `;
-
-  return {
-    id: generateId(),
-    mailboxId,
-    from: `${sender.name} <${sender.email}>`,
-    to: email,
-    subject: template.subject,
-    textBody: template.body.replace(/<[^>]*>/g, ''),
-    htmlBody,
-    snippet: template.body.replace(/<[^>]*>/g, '').slice(0, 80) + '…',
-    receivedAt: Date.now(),
-    isRead: false,
-  };
+/**
+ * Fetches inbox from the IMAP API endpoint.
+ * Falls back to empty array if API is unavailable.
+ */
+async function fetchInboxFromAPI(address: string): Promise<TempMessage[]> {
+  try {
+    const res = await fetch(`/api/mail/inbox?address=${encodeURIComponent(address)}`);
+    if (!res.ok) {
+      console.warn('IMAP API returned', res.status);
+      return [];
+    }
+    const data = await res.json();
+    if (data.success && Array.isArray(data.messages)) {
+      return data.messages.map((msg: any) => ({
+        id: String(msg.uid),
+        mailboxId: '', // filled by caller
+        from: msg.from || 'Unknown',
+        to: msg.to || address,
+        subject: msg.subject || '(No subject)',
+        textBody: '',
+        htmlBody: '',
+        snippet: (msg.subject || '').slice(0, 80),
+        receivedAt: msg.date || Date.now(),
+        isRead: msg.isRead || false,
+        uid: msg.uid,
+      }));
+    }
+    return [];
+  } catch (err) {
+    console.warn('IMAP API unavailable:', err);
+    return [];
+  }
 }
 
-function startDemoSimulation(mailboxId: string, email: string) {
-  // Send a "welcome" message immediately
-  const welcome: TempMessage = {
-    id: generateId(),
-    mailboxId,
-    from: `Service Hub <system@${getDomain()}>`,
-    to: email,
-    subject: 'Your temporary inbox is ready!',
-    textBody: `Your temporary email address ${email} is now active. Any emails sent to this address will appear here.`,
-    htmlBody: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: #1a1a2e; padding: 30px; border-radius: 12px;">
-          <h2 style="color: #c4b5fd;">✉️ Inbox Ready</h2>
-          <p style="color: #a0aec0; line-height: 1.6;">
-            Your temporary email address <strong style="color: #e2e8f0;">${email}</strong> is now active.
-          </p>
-          <p style="color: #a0aec0; line-height: 1.6;">
-            Any emails sent to this address will appear in your inbox automatically.
-          </p>
-          <div style="background: #2d2d44; border-radius: 8px; padding: 16px; margin-top: 16px;">
-            <p style="color: #c4b5fd; font-size: 13px; margin: 0;">
-              💡 This is a demo mode. In production, real emails would arrive via your mail server.
-            </p>
-          </div>
-        </div>
-      </div>
-    `,
-    snippet: `Your temporary email address ${email} is now active…`,
-    receivedAt: Date.now(),
-    isRead: false,
-  };
-  messages.push(welcome);
-
-  // Simulate random incoming emails every 15-45 seconds
-  const interval = setInterval(() => {
-    const mailbox = mailboxes.find(m => m.id === mailboxId);
-    if (!mailbox || mailbox.status === 'expired' || Date.now() > mailbox.expiresAt) {
-      clearInterval(interval);
-      delete demoIntervals[mailboxId];
-      return;
+/**
+ * Fetches a full message from the IMAP API endpoint.
+ */
+async function fetchMessageFromAPI(uid: number): Promise<TempMessage | null> {
+  try {
+    const res = await fetch(`/api/mail/message?uid=${uid}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.success && data.message) {
+      return {
+        id: String(data.message.uid),
+        mailboxId: '',
+        from: data.message.from || 'Unknown',
+        to: data.message.to || '',
+        subject: data.message.subject || '(No subject)',
+        textBody: data.message.textBody || '',
+        htmlBody: data.message.htmlBody || '',
+        snippet: (data.message.textBody || '').slice(0, 80),
+        receivedAt: data.message.date || Date.now(),
+        isRead: true,
+        uid: data.message.uid,
+      };
     }
-
-    const mbMessages = messages.filter(m => m.mailboxId === mailboxId);
-    if (mbMessages.length < getMaxMessages()) {
-      messages.push(generateDemoMessage(mailboxId, email));
-    }
-  }, 15000 + Math.random() * 30000);
-
-  demoIntervals[mailboxId] = interval;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Public API ────────────────────────────────────────────────────
@@ -191,12 +148,10 @@ export function createMailbox(expiryMinutes: ExpiryOption = 30): {
   mailbox?: TempMailbox;
   error?: string;
 } {
-  // Rate limit check
   if (!checkRateLimit()) {
     return { success: false, error: 'Rate limit exceeded. Please wait before creating a new mailbox.' };
   }
 
-  // Check max mailboxes
   const maxMb = getMaxMailboxes();
   const activeMailboxes = mailboxes.filter(m => m.status === 'active' && Date.now() < m.expiresAt);
   if (activeMailboxes.length >= maxMb) {
@@ -218,9 +173,7 @@ export function createMailbox(expiryMinutes: ExpiryOption = 30): {
 
   mailboxes.push(mailbox);
   creationTimestamps.push(now);
-
-  // Start demo email simulation
-  startDemoSimulation(mailbox.id, mailbox.email);
+  cachedMessages[mailbox.id] = [];
 
   return { success: true, mailbox };
 }
@@ -228,37 +181,56 @@ export function createMailbox(expiryMinutes: ExpiryOption = 30): {
 export function getMailbox(mailboxId: string): TempMailbox | null {
   const mb = mailboxes.find(m => m.id === mailboxId);
   if (!mb) return null;
-  // Check expiry
   if (Date.now() > mb.expiresAt) {
     mb.status = 'expired';
   }
   return mb;
 }
 
-export function getInbox(mailboxId: string): TempMessage[] {
-  return messages
-    .filter(m => m.mailboxId === mailboxId)
-    .sort((a, b) => b.receivedAt - a.receivedAt);
+/**
+ * Refreshes inbox by calling the IMAP API.
+ */
+export async function refreshInbox(mailboxId: string): Promise<TempMessage[]> {
+  const mb = mailboxes.find(m => m.id === mailboxId);
+  if (!mb) return [];
+
+  const messages = await fetchInboxFromAPI(mb.email);
+  // Tag messages with mailbox ID
+  const tagged = messages.map(m => ({ ...m, mailboxId }));
+  cachedMessages[mailboxId] = tagged;
+  return tagged;
 }
 
-export function getMessage(messageId: string): TempMessage | null {
-  const msg = messages.find(m => m.id === messageId);
-  if (msg) msg.isRead = true;
-  return msg || null;
+export function getInbox(mailboxId: string): TempMessage[] {
+  return cachedMessages[mailboxId] || [];
+}
+
+/**
+ * Gets full message content via IMAP API.
+ */
+export async function getFullMessage(uid: number, mailboxId: string): Promise<TempMessage | null> {
+  const msg = await fetchMessageFromAPI(uid);
+  if (msg) {
+    msg.mailboxId = mailboxId;
+    // Update cache
+    const cached = cachedMessages[mailboxId];
+    if (cached) {
+      const idx = cached.findIndex(m => m.uid === uid);
+      if (idx !== -1) {
+        cached[idx] = { ...cached[idx], ...msg, isRead: true };
+      }
+    }
+  }
+  return msg;
 }
 
 export function getUnreadCount(mailboxId: string): number {
-  return messages.filter(m => m.mailboxId === mailboxId && !m.isRead).length;
+  return (cachedMessages[mailboxId] || []).filter(m => !m.isRead).length;
 }
 
 export function deleteMailbox(mailboxId: string): void {
-  // Stop demo simulation
-  if (demoIntervals[mailboxId]) {
-    clearInterval(demoIntervals[mailboxId]);
-    delete demoIntervals[mailboxId];
-  }
   mailboxes = mailboxes.filter(m => m.id !== mailboxId);
-  messages = messages.filter(m => m.mailboxId !== mailboxId);
+  delete cachedMessages[mailboxId];
 }
 
 export function getAllMailboxes(): TempMailbox[] {
@@ -271,14 +243,8 @@ export function cleanupExpired(): void {
   const expired = mailboxes.filter(m => now > m.expiresAt);
   expired.forEach(m => {
     m.status = 'expired';
-    if (demoIntervals[m.id]) {
-      clearInterval(demoIntervals[m.id]);
-      delete demoIntervals[m.id];
-    }
+    delete cachedMessages[m.id];
   });
-  // Remove expired mailboxes and their messages
-  const expiredIds = new Set(expired.map(m => m.id));
-  messages = messages.filter(m => !expiredIds.has(m.mailboxId));
   mailboxes = mailboxes.filter(m => m.status === 'active');
 }
 
@@ -289,4 +255,4 @@ export const EXPIRY_OPTIONS: { label: string; value: ExpiryOption }[] = [
   { label: '24 hours', value: 1440 },
 ];
 
-export { getDomain, getMaxMailboxes, getMaxMessages };
+export { getDomain };

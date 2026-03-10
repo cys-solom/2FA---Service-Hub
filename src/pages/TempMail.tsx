@@ -1,8 +1,8 @@
 /**
  * Service Hub - Temp Mail Page
  *
- * A complete temporary email inbox with generate, view, copy, and delete.
- * Uses in-memory demo service; swap for real API in production.
+ * Connects to Mailcow IMAP via serverless API to fetch real emails.
+ * Generates random addresses on the configured domain (catch-all).
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -19,8 +19,9 @@ import type { TempMailbox, TempMessage, ExpiryOption } from '../services/tempmai
 import {
   createMailbox,
   getMailbox,
+  refreshInbox,
   getInbox,
-  getMessage,
+  getFullMessage,
   getUnreadCount,
   deleteMailbox,
 } from '../services/tempmail-service';
@@ -32,9 +33,11 @@ function TempMailPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const addToast = useCallback((message: string, type: ToastData['type'] = 'success') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -45,46 +48,54 @@ function TempMailPage() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // Refresh inbox data
-  const refreshInbox = useCallback(() => {
+  // Refresh inbox from IMAP
+  const handleRefresh = useCallback(async (silent = false) => {
     if (!mailbox) return;
     const mb = getMailbox(mailbox.id);
     if (!mb || mb.status === 'expired') {
       setMailbox(null);
       setMessages([]);
       setSelectedMessage(null);
-      addToast('Mailbox expired', 'info');
+      if (!silent) addToast('Mailbox expired', 'info');
       return;
     }
-    setMailbox(mb);
-    setMessages(getInbox(mb.id));
-    setUnreadCount(getUnreadCount(mb.id));
+
+    if (!silent) setIsRefreshing(true);
+    try {
+      const freshMessages = await refreshInbox(mb.id);
+      setMessages(freshMessages);
+      setUnreadCount(getUnreadCount(mb.id));
+      if (!silent && freshMessages.length > 0) {
+        addToast(`${freshMessages.length} message(s) found`, 'success');
+      }
+    } catch (err) {
+      if (!silent) addToast('Failed to refresh inbox', 'error');
+    }
+    if (!silent) setIsRefreshing(false);
   }, [mailbox, addToast]);
 
   // Generate new mailbox
-  const handleGenerate = useCallback((expiry: ExpiryOption) => {
+  const handleGenerate = useCallback(async (expiry: ExpiryOption) => {
     setIsLoading(true);
     setError(null);
     setSelectedMessage(null);
 
-    // Delete current mailbox if exists
-    if (mailbox) {
-      deleteMailbox(mailbox.id);
-    }
+    if (mailbox) deleteMailbox(mailbox.id);
 
-    // Small delay for UX
-    setTimeout(() => {
+    setTimeout(async () => {
       const result = createMailbox(expiry);
-      setIsLoading(false);
       if (result.success && result.mailbox) {
         setMailbox(result.mailbox);
-        setMessages(getInbox(result.mailbox.id));
+        addToast(`Inbox created: ${result.mailbox.email}`, 'success');
+        // Do initial refresh
+        const msgs = await refreshInbox(result.mailbox.id);
+        setMessages(msgs);
         setUnreadCount(getUnreadCount(result.mailbox.id));
-        addToast('Temporary inbox created!', 'success');
       } else {
         setError(result.error || 'Failed to create mailbox');
       }
-    }, 600);
+      setIsLoading(false);
+    }, 400);
   }, [mailbox, addToast]);
 
   // Copy email
@@ -109,20 +120,26 @@ function TempMailPage() {
     }
   }, [mailbox, addToast]);
 
-  // Select message
-  const handleSelectMessage = useCallback((msg: TempMessage) => {
-    const full = getMessage(msg.id);
-    if (full) {
-      setSelectedMessage(full);
-      // Update messages to reflect read status
-      if (mailbox) {
+  // Select message — fetch full content from IMAP
+  const handleSelectMessage = useCallback(async (msg: TempMessage) => {
+    if (msg.uid && mailbox) {
+      setIsRefreshing(true);
+      const full = await getFullMessage(msg.uid, mailbox.id);
+      if (full) {
+        setSelectedMessage(full);
         setMessages(getInbox(mailbox.id));
         setUnreadCount(getUnreadCount(mailbox.id));
+      } else {
+        // Fallback: show what we have
+        setSelectedMessage(msg);
       }
+      setIsRefreshing(false);
+    } else {
+      setSelectedMessage(msg);
     }
   }, [mailbox]);
 
-  // Timer & auto-refresh
+  // Expiry timer
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (!mailbox) return;
@@ -130,42 +147,40 @@ function TempMailPage() {
     const tick = () => {
       const remaining = Math.max(0, Math.floor((mailbox.expiresAt - Date.now()) / 1000));
       setTimeRemaining(remaining);
-
       if (remaining <= 0) {
         setMailbox(null);
         setMessages([]);
         setSelectedMessage(null);
-        return;
       }
-
-      // Auto-refresh inbox every 5 seconds
-      refreshInbox();
     };
 
     tick();
-    intervalRef.current = setInterval(tick, 5000);
-
-    // Also tick the timer every second
-    const timerInterval = setInterval(() => {
-      setTimeRemaining(prev => Math.max(0, prev - 1));
-    }, 1000);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      clearInterval(timerInterval);
-    };
+    intervalRef.current = setInterval(tick, 1000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [mailbox?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh inbox every 10 seconds
+  useEffect(() => {
+    if (refreshRef.current) clearInterval(refreshRef.current);
+    if (!mailbox) return;
+
+    refreshRef.current = setInterval(() => {
+      handleRefresh(true); // silent refresh
+    }, 10000);
+
+    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
+  }, [mailbox?.id, handleRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen relative">
       <div className="bg-glow" />
       <div className="grid-pattern fixed inset-0 z-0 pointer-events-none" />
 
-      <main className="relative z-10 flex items-start justify-center min-h-screen px-4 py-8">
+      <main className="relative z-10 flex items-start justify-center min-h-screen px-4 py-8 pt-20">
         <div className="w-full max-w-2xl">
           <TempMailHeader />
 
-          {/* Generator (always visible when no mailbox) */}
+          {/* Generator (when no mailbox) */}
           {!mailbox && (
             <EmailGenerator
               onGenerate={handleGenerate}
@@ -182,7 +197,7 @@ function TempMailPage() {
                 timeRemaining={timeRemaining}
                 unreadCount={unreadCount}
                 onCopy={handleCopy}
-                onRefresh={refreshInbox}
+                onRefresh={() => handleRefresh(false)}
                 onDelete={handleDelete}
                 onRegenerate={() => handleGenerate(30)}
               />
@@ -193,11 +208,16 @@ function TempMailPage() {
                   <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest">
                     {selectedMessage ? 'Message' : 'Inbox'}
                   </h2>
-                  {!selectedMessage && messages.length > 0 && (
-                    <span className="text-[10px] text-white/20 tabular-nums">
-                      {messages.length} message{messages.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isRefreshing && (
+                      <div className="w-3 h-3 border border-violet-400/30 border-t-violet-400 rounded-full animate-spin" />
+                    )}
+                    {!selectedMessage && messages.length > 0 && (
+                      <span className="text-[10px] text-white/20 tabular-nums">
+                        {messages.length} message{messages.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {selectedMessage ? (
