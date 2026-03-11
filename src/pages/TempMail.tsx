@@ -29,6 +29,7 @@ import {
   triggerAutoCleanup,
 } from '../services/tempmail-service';
 import { getPrimaryDomain, loginServiceMail, isServiceMailLoggedIn, logoutServiceMail } from '../services/domain-config';
+import { playNotificationSound, updateTabBadge } from '../utils/email-utils';
 
 function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
   const { address: urlAddress } = useParams<{ address?: string }>();
@@ -47,6 +48,7 @@ function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
   const [countdown, setCountdown] = useState(5);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevMsgCountRef = useRef(0);
 
   const addToast = useCallback((message: string, type: ToastData['type'] = 'success') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -79,8 +81,15 @@ function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
     if (!silent) setIsRefreshing(true);
     try {
       const fresh = await refreshInbox(mailbox.id);
+      // Sound notification if new messages
+      if (fresh.length > prevMsgCountRef.current && prevMsgCountRef.current > 0) {
+        playNotificationSound();
+      }
+      prevMsgCountRef.current = fresh.length;
       setMessages(fresh);
-      setUnreadCount(getUnreadCount(mailbox.id));
+      const unread = getUnreadCount(mailbox.id);
+      setUnreadCount(unread);
+      updateTabBadge(unread);
     } catch {
       if (!silent) addToast('Failed to refresh', 'error');
     }

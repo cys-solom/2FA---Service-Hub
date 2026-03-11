@@ -4,9 +4,70 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Theme Variables ────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --bg-primary: #030014;
+  --bg-secondary: rgba(255, 255, 255, 0.02);
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-card-hover: rgba(255, 255, 255, 0.05);
+  --nav-bg: rgba(10, 10, 26, 0.8);
+  --nav-border: rgba(255, 255, 255, 0.08);
+  --hover-bg: rgba(255, 255, 255, 0.04);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-muted: rgba(255, 255, 255, 0.3);
+  --text-dim: rgba(255, 255, 255, 0.15);
+  --border-color: rgba(255, 255, 255, 0.06);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --glow-color: rgba(139, 92, 246, 0.08);
+}
+
+[data-theme="light"] {
+  --bg-primary: #f8f9fc;
+  --bg-secondary: rgba(0, 0, 0, 0.02);
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-card-hover: rgba(255, 255, 255, 0.95);
+  --nav-bg: rgba(255, 255, 255, 0.85);
+  --nav-border: rgba(0, 0, 0, 0.08);
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --text-primary: #1a1a2e;
+  --text-secondary: rgba(0, 0, 0, 0.65);
+  --text-muted: rgba(0, 0, 0, 0.35);
+  --text-dim: rgba(0, 0, 0, 0.15);
+  --border-color: rgba(0, 0, 0, 0.08);
+  --input-bg: rgba(0, 0, 0, 0.04);
+  --glow-color: rgba(139, 92, 246, 0.05);
+}
+
+[data-theme="light"] body {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .glass-card {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .input-field {
+  background: var(--input-bg) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .bg-glow {
+  opacity: 0.3;
+}
+
+[data-theme="light"] .grid-pattern {
+  opacity: 0.3;
+}
+
 @layer base {
   body {
-    @apply bg-[#030014] text-white antialiased overflow-x-hidden;
+    background: var(--bg-primary);
+    @apply text-white antialiased overflow-x-hidden;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 

@@ -25,6 +25,7 @@ import {
   deleteMessage,
 } from '../services/tempmail-service';
 import { getPrimaryDomain, getActiveDomains } from '../services/domain-config';
+import { playNotificationSound, updateTabBadge } from '../utils/email-utils';
 
 function ReceiveCodePage() {
   const { address: urlAddress } = useParams<{ address?: string }>();
@@ -42,6 +43,7 @@ function ReceiveCodePage() {
   const [countdown, setCountdown] = useState(5);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevMsgCountRef = useRef(0);
 
   const domain = getPrimaryDomain();
   const activeDomains = getActiveDomains().map(d => d.domain);
@@ -116,8 +118,15 @@ function ReceiveCodePage() {
     const doRefresh = async () => {
       try {
         const msgs = await refreshInbox(mailboxId);
+        // Sound notification if new messages
+        if (msgs.length > prevMsgCountRef.current && prevMsgCountRef.current > 0) {
+          playNotificationSound();
+        }
+        prevMsgCountRef.current = msgs.length;
         setMessages(msgs);
-        setUnreadCount(getUnreadCount(mailboxId));
+        const unread = getUnreadCount(mailboxId);
+        setUnreadCount(unread);
+        updateTabBadge(unread);
       } catch { /* silent */ }
       setCountdown(5);
     };
