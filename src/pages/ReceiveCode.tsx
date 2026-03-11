@@ -24,7 +24,7 @@ import {
   getUnreadCount,
   deleteMessage,
 } from '../services/tempmail-service';
-import { getPrimaryDomain } from '../services/domain-config';
+import { getPrimaryDomain, getActiveDomains } from '../services/domain-config';
 
 function ReceiveCodePage() {
   const { address: urlAddress } = useParams<{ address?: string }>();
@@ -37,10 +37,12 @@ function ReceiveCodePage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const domain = getPrimaryDomain();
+  const activeDomains = getActiveDomains().map(d => d.domain);
 
   const addToast = useCallback((message: string, type: ToastData['type'] = 'success') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -55,7 +57,20 @@ function ReceiveCodePage() {
   const loadInbox = useCallback(async (addr: string) => {
     let fullAddr = addr.trim();
     if (!fullAddr) return;
-    if (!fullAddr.includes('@')) fullAddr = `${fullAddr}@${domain}`;
+    setEmailError(null);
+
+    // Validate: must contain @
+    if (!fullAddr.includes('@')) {
+      setEmailError(`Please enter the full email address (e.g. name@${domain})`);
+      return;
+    }
+
+    // Validate: domain must be in active domains
+    const emailDomain = fullAddr.split('@')[1];
+    if (!activeDomains.includes(emailDomain)) {
+      setEmailError(`Invalid domain "${emailDomain}". Valid domains: ${activeDomains.join(', ')}`);
+      return;
+    }
 
     setIsLoading(true);
     setActiveEmail(fullAddr);
@@ -79,7 +94,7 @@ function ReceiveCodePage() {
       setUnreadCount(getUnreadCount(mb.id));
     }
     setIsLoading(false);
-  }, [domain, navigate]);
+  }, [domain, activeDomains, navigate]);
 
   // Handle URL address on mount
   useEffect(() => {
@@ -88,7 +103,7 @@ function ReceiveCodePage() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh every 8 seconds
+  // Auto-refresh every 5 seconds
   useEffect(() => {
     if (refreshRef.current) clearInterval(refreshRef.current);
     if (!mailboxId) return;
@@ -101,7 +116,7 @@ function ReceiveCodePage() {
       } catch { /* silent */ }
     };
 
-    refreshRef.current = setInterval(doRefresh, 8000);
+    refreshRef.current = setInterval(doRefresh, 5000);
     return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
   }, [mailboxId]);
 
@@ -183,9 +198,9 @@ function ReceiveCodePage() {
                   </svg>
                 </div>
                 <input
-                  type="text"
+                  type="email"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={e => { setEmail(e.target.value); setEmailError(null); }}
                   onKeyDown={e => e.key === 'Enter' && loadInbox(email)}
                   placeholder={`your-email@${domain}`}
                   className="input-field !py-3.5 text-sm !pl-11"
@@ -209,6 +224,14 @@ function ReceiveCodePage() {
                 )}
               </button>
             </div>
+            {emailError && (
+              <p className="text-red-400/80 text-xs mt-2 flex items-center gap-1.5 animate-fade-in">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {emailError}
+              </p>
+            )}
           </div>
 
           {/* ── Active Inbox ───────────────────────────── */}

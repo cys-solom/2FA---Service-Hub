@@ -89,13 +89,22 @@ const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
       <div className="email-body">
         {safeHtml ? (
           <div
-            className="text-sm text-white/55 leading-relaxed [&_a]:text-violet-400 [&_a]:underline [&_a:hover]:text-violet-300 [&_strong]:text-white/75 [&_b]:text-white/75 [&_h1]:text-white/80 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-white/75 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-white/70 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:mb-2 [&_hr]:border-white/[0.05] [&_hr]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-violet-500/30 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-white/40 [&_code]:bg-white/[0.05] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono"
+            className="text-sm text-white/55 leading-relaxed [&_a]:text-violet-400 [&_a]:underline [&_a:hover]:text-violet-300 [&_strong]:text-white/75 [&_b]:text-white/75 [&_h1]:text-white/80 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-white/75 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-white/70 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:mb-2 [&_hr]:border-white/[0.05] [&_hr]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-violet-500/30 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-white/40 [&_code]:bg-white/[0.05] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_img]:max-w-full [&_img]:h-auto [&_table]:w-full"
             dangerouslySetInnerHTML={{ __html: safeHtml }}
           />
-        ) : (
+        ) : message.textBody ? (
           <pre className="text-sm text-white/45 leading-relaxed whitespace-pre-wrap font-sans">
-            {message.textBody || 'No content'}
+            {message.textBody}
           </pre>
+        ) : (
+          <div className="text-center py-8">
+            <svg className="w-10 h-10 text-white/10 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <p className="text-white/20 text-xs">This email has no viewable content</p>
+            <p className="text-white/10 text-[10px] mt-1">The message may contain only images or attachments</p>
+          </div>
         )}
       </div>
     </div>

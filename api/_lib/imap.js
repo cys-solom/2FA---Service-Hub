@@ -114,14 +114,39 @@ async function fetchMessageByUid(uid) {
       // Parse the raw email source
       const parsed = await simpleParser(msg.source);
 
+      // Extract text body — try multiple sources
+      let textBody = parsed.text || '';
+      let htmlBody = parsed.html || '';
+
+      // Some emails have content in attachments (inline)
+      if (!textBody && !htmlBody && parsed.attachments && parsed.attachments.length > 0) {
+        for (const att of parsed.attachments) {
+          if (att.contentType === 'text/html' && att.content) {
+            htmlBody = att.content.toString('utf-8');
+            break;
+          }
+          if (att.contentType === 'text/plain' && att.content) {
+            textBody = att.content.toString('utf-8');
+          }
+        }
+      }
+
+      // If we still have no text but have HTML, extract text from HTML
+      if (!textBody && htmlBody) {
+        textBody = htmlBody.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                          .replace(/<[^>]+>/g, ' ')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+      }
+
       return {
         uid: msg.uid,
         subject: parsed.subject || '(No subject)',
         from: parsed.from ? parsed.from.text : 'Unknown',
         to: parsed.to ? parsed.to.text : '',
         date: parsed.date ? parsed.date.getTime() : Date.now(),
-        textBody: parsed.text || '',
-        htmlBody: parsed.html || '',
+        textBody: textBody,
+        htmlBody: htmlBody,
         isRead: true,
       };
     } finally {

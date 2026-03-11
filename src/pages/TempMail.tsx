@@ -90,7 +90,7 @@ function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
     if (refreshRef.current) clearInterval(refreshRef.current);
     if (!mailbox) return;
     handleRefresh(true);
-    refreshRef.current = setInterval(() => handleRefresh(true), 10000);
+    refreshRef.current = setInterval(() => handleRefresh(true), 5000);
     return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
   }, [mailbox?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
