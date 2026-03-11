@@ -336,7 +336,12 @@ function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
                     {selectedMessage ? 'Message' : 'Inbox'}
                   </h2>
                   <div className="flex items-center gap-2">
-                    {mailbox && <span className="text-[9px] text-white/15 tabular-nums font-mono">{countdown}s</span>}
+                    {mailbox && (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-violet-500/8 border border-violet-500/10">
+                        <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                        <span className="text-[10px] text-violet-300/70 tabular-nums font-mono font-medium">{countdown}s</span>
+                      </div>
+                    )}
                     {isRefreshing && <div className="w-3 h-3 border border-violet-400/30 border-t-violet-400 rounded-full animate-spin" />}
                     {!selectedMessage && messages.length > 0 && (
                       <span className="text-[10px] text-white/20">{messages.length} message{messages.length !== 1 ? 's' : ''}</span>
