@@ -1,34 +1,18 @@
-import React, { useState } from 'react';
-import type { ExpiryOption } from '../../services/tempmail-service';
-import { EXPIRY_OPTIONS } from '../../services/tempmail-service';
+import React from 'react';
 
 interface EmailGeneratorProps {
-  onGenerate: (expiry: ExpiryOption) => void;
+  onGenerate: () => void;
   isLoading: boolean;
   error: string | null;
 }
 
 const EmailGenerator: React.FC<EmailGeneratorProps> = ({ onGenerate, isLoading, error }) => {
-  const [expiry, setExpiry] = useState<ExpiryOption>(30);
-
   return (
     <div className="glass-card p-6 sm:p-8 animate-fade-in-up" style={{ animationDelay: '0.15s', opacity: 0 }}>
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* Expiry selector */}
-        <select
-          value={expiry}
-          onChange={(e) => setExpiry(Number(e.target.value) as ExpiryOption)}
-          className="input-field text-sm !py-3 sm:w-40 appearance-none cursor-pointer"
-          aria-label="Mailbox expiry time"
-        >
-          {EXPIRY_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-
         {/* Generate button */}
         <button
-          onClick={() => onGenerate(expiry)}
+          onClick={onGenerate}
           disabled={isLoading}
           className="btn-primary flex-1 !py-3 disabled:opacity-50 disabled:cursor-not-allowed"
         >
