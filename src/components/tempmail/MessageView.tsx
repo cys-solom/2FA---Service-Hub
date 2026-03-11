@@ -23,20 +23,14 @@ function senderInitial(from: string): string {
 const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
   const safeHtml = useMemo(() => {
     if (!message.htmlBody) return null;
+    // Use permissive sanitization — only block dangerous elements
     return DOMPurify.sanitize(message.htmlBody, {
-      ALLOWED_TAGS: [
-        'div', 'span', 'p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'a', 'b', 'i', 'u', 'strong', 'em', 'ul', 'ol', 'li',
-        'table', 'thead', 'tbody', 'tr', 'td', 'th',
-        'img', 'blockquote', 'pre', 'code',
-      ],
-      ALLOWED_ATTR: [
-        'href', 'target', 'rel', 'style', 'class', 'alt', 'src', 'width', 'height',
-        'cellpadding', 'cellspacing', 'border', 'align', 'valign',
-      ],
-      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea'],
-      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'meta', 'link'],
+      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onmouseout', 'onfocus', 'onblur'],
       ADD_ATTR: ['target'],
+      WHOLE_DOCUMENT: false,
+      RETURN_DOM: false,
     });
   }, [message.htmlBody]);
 
@@ -89,11 +83,11 @@ const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
       <div className="email-body">
         {safeHtml ? (
           <div
-            className="text-sm text-white/55 leading-relaxed [&_a]:text-violet-400 [&_a]:underline [&_a:hover]:text-violet-300 [&_strong]:text-white/75 [&_b]:text-white/75 [&_h1]:text-white/80 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-white/75 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-white/70 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:mb-2 [&_hr]:border-white/[0.05] [&_hr]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-violet-500/30 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-white/40 [&_code]:bg-white/[0.05] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_img]:max-w-full [&_img]:h-auto [&_table]:w-full"
+            className="text-sm text-white/70 leading-relaxed [&_a]:text-violet-400 [&_a]:underline [&_a:hover]:text-violet-300 [&_strong]:text-white/80 [&_b]:text-white/80 [&_h1]:text-white/85 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-white/80 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-white/75 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:mb-2 [&_hr]:border-white/[0.05] [&_hr]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-violet-500/30 [&_blockquote]:pl-4 [&_blockquote]:italic [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-full [&_td]:p-1 [&_th]:p-1 [&_center]:block [&_font]:text-inherit"
             dangerouslySetInnerHTML={{ __html: safeHtml }}
           />
         ) : message.textBody ? (
-          <pre className="text-sm text-white/45 leading-relaxed whitespace-pre-wrap font-sans">
+          <pre className="text-sm text-white/50 leading-relaxed whitespace-pre-wrap font-sans">
             {message.textBody}
           </pre>
         ) : (

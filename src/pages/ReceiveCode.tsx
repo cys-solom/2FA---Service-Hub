@@ -39,7 +39,9 @@ function ReceiveCodePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [countdown, setCountdown] = useState(5);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const domain = getPrimaryDomain();
   const activeDomains = getActiveDomains().map(d => d.domain);
@@ -103,10 +105,13 @@ function ReceiveCodePage() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh every 5 seconds
+  // Auto-refresh every 5 seconds with countdown
   useEffect(() => {
     if (refreshRef.current) clearInterval(refreshRef.current);
+    if (countdownRef.current) clearInterval(countdownRef.current);
     if (!mailboxId) return;
+
+    setCountdown(5);
 
     const doRefresh = async () => {
       try {
@@ -114,10 +119,18 @@ function ReceiveCodePage() {
         setMessages(msgs);
         setUnreadCount(getUnreadCount(mailboxId));
       } catch { /* silent */ }
+      setCountdown(5);
     };
 
     refreshRef.current = setInterval(doRefresh, 5000);
-    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 5 : prev - 1));
+    }, 1000);
+
+    return () => {
+      if (refreshRef.current) clearInterval(refreshRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
   }, [mailboxId]);
 
   // Manual refresh
@@ -247,12 +260,15 @@ function ReceiveCodePage() {
                       <span className="px-2 py-0.5 rounded-full bg-cyan-500/12 border border-cyan-500/15 text-[9px] text-cyan-300 font-bold">{unreadCount} new</span>
                     )}
                   </div>
-                  <button onClick={handleRefresh} className="p-2 rounded-lg text-white/20 hover:text-white/50 hover:bg-white/[0.05] transition-all" title="Refresh">
-                    <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-white/15 tabular-nums font-mono">{countdown}s</span>
+                    <button onClick={handleRefresh} className="p-2 rounded-lg text-white/20 hover:text-white/50 hover:bg-white/[0.05] transition-all" title="Refresh">
+                      <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
 

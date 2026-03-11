@@ -44,7 +44,9 @@ function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
   const [createMode, setCreateMode] = useState<'random' | 'custom'>('random');
   const [customPrefix, setCustomPrefix] = useState('');
   const [customError, setCustomError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(5);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const addToast = useCallback((message: string, type: ToastData['type'] = 'success') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -85,13 +87,21 @@ function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
     if (!silent) setIsRefreshing(false);
   }, [mailbox, addToast]);
 
-  // Auto-refresh every 10s
+  // Auto-refresh every 5s with countdown
   useEffect(() => {
     if (refreshRef.current) clearInterval(refreshRef.current);
+    if (countdownRef.current) clearInterval(countdownRef.current);
     if (!mailbox) return;
     handleRefresh(true);
-    refreshRef.current = setInterval(() => handleRefresh(true), 5000);
-    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
+    setCountdown(5);
+    refreshRef.current = setInterval(() => { handleRefresh(true); setCountdown(5); }, 5000);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 5 : prev - 1));
+    }, 1000);
+    return () => {
+      if (refreshRef.current) clearInterval(refreshRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
   }, [mailbox?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check existing email (public)
@@ -326,6 +336,7 @@ function TempMailPageContent({ onLogout }: { onLogout: () => void }) {
                     {selectedMessage ? 'Message' : 'Inbox'}
                   </h2>
                   <div className="flex items-center gap-2">
+                    {mailbox && <span className="text-[9px] text-white/15 tabular-nums font-mono">{countdown}s</span>}
                     {isRefreshing && <div className="w-3 h-3 border border-violet-400/30 border-t-violet-400 rounded-full animate-spin" />}
                     {!selectedMessage && messages.length > 0 && (
                       <span className="text-[10px] text-white/20">{messages.length} message{messages.length !== 1 ? 's' : ''}</span>
