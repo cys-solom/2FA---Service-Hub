@@ -42,7 +42,10 @@ function ReceiveCodePage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [countdown, setCountdown] = useState(5);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteInput, setPasteInput] = useState('');
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pasteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevMsgCountRef = useRef(0);
 
@@ -189,16 +192,32 @@ function ReceiveCodePage() {
   }, [activeEmail, email, addToast]);
 
   const handlePaste = useCallback(async () => {
+    // Try Clipboard API first
     try {
       const text = await navigator.clipboard.readText();
-      if (text) {
-        setEmail(text);
+      if (text && text.trim()) {
+        setEmail(text.trim());
         setEmailError(null);
+        addToast('Email pasted', 'success');
+        return;
       }
     } catch {
-      addToast('Paste failed — please allow clipboard access', 'error');
+      // Clipboard API blocked → open paste modal
     }
+    setPasteInput('');
+    setShowPasteModal(true);
+    setTimeout(() => pasteInputRef.current?.focus(), 100);
   }, [addToast]);
+
+  const handleConfirmPaste = useCallback(() => {
+    if (pasteInput.trim()) {
+      setEmail(pasteInput.trim());
+      setEmailError(null);
+      addToast('Email pasted', 'success');
+    }
+    setShowPasteModal(false);
+    setPasteInput('');
+  }, [pasteInput, addToast]);
 
   // Manual refresh
   const handleRefresh = useCallback(async () => {
@@ -316,13 +335,13 @@ function ReceiveCodePage() {
             </div>
 
             <div className="flex gap-2 mt-3">
-              <button onClick={handlePaste} className="flex-1 py-2 px-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                Paste
+              <button onClick={handlePaste} className="flex-1 min-h-[48px] py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-white/60 active:bg-white/15 active:text-white hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2 touch-manipulation">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                Paste Email
               </button>
-              <button onClick={handleCopy} className="flex-1 py-2 px-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                Copy
+              <button onClick={handleCopy} className="flex-1 min-h-[48px] py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-white/60 active:bg-white/15 active:text-white hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2 touch-manipulation">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                Copy Email
               </button>
             </div>
 
@@ -401,6 +420,69 @@ function ReceiveCodePage() {
           />
         </div>
       </main>
+
+      {/* ── PASTE MODAL (Mobile Fallback) ──────────── */}
+      {showPasteModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+          onClick={() => setShowPasteModal(false)}
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" />
+          <div
+            className="relative w-full max-w-sm glass-card p-6 space-y-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                  <svg className="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Paste Email</h3>
+                  <p className="text-[10px] text-white/30">Long-press below → Paste</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPasteModal(false)}
+                className="p-2 rounded-xl text-white/20 hover:text-white/50 hover:bg-white/5 transition-all touch-manipulation"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <textarea
+              ref={pasteInputRef}
+              value={pasteInput}
+              onChange={(e) => setPasteInput(e.target.value)}
+              placeholder="Long-press here and tap Paste…"
+              rows={2}
+              className="input-field !text-sm resize-none touch-manipulation"
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowPasteModal(false)}
+                className="flex-1 min-h-[48px] py-3 px-4 rounded-xl text-sm font-medium text-white/40 bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] active:bg-white/[0.08] transition-all touch-manipulation"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmPaste}
+                disabled={!pasteInput.trim()}
+                className="flex-1 min-h-[48px] py-3 px-4 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-blue-600 shadow-lg shadow-cyan-500/20 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Toast toasts={toasts} onRemove={removeToast} />
     </div>
