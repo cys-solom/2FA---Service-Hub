@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import DOMPurify from 'dompurify';
 import type { TempMessage } from '../../services/tempmail-service';
+import { extractOTP } from '../../utils/otp-extractor';
 
 interface MessageViewProps {
   message: TempMessage;
@@ -21,9 +22,10 @@ function senderInitial(from: string): string {
 }
 
 const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
+  const [otpCopied, setOtpCopied] = useState(false);
+
   const safeHtml = useMemo(() => {
     if (!message.htmlBody) return null;
-    // Use permissive sanitization — only block dangerous elements
     return DOMPurify.sanitize(message.htmlBody, {
       USE_PROFILES: { html: true },
       FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'meta', 'link'],
@@ -34,12 +36,28 @@ const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
     });
   }, [message.htmlBody]);
 
+  // Auto-extract OTP from the message
+  const detectedOTP = useMemo(() => {
+    const bodyText = message.htmlBody || message.textBody || '';
+    const subjectText = message.subject || '';
+    // Try body first, then subject
+    return extractOTP(bodyText) || extractOTP(subjectText);
+  }, [message.htmlBody, message.textBody, message.subject]);
+
+  const handleCopyOTP = useCallback(() => {
+    if (!detectedOTP) return;
+    navigator.clipboard.writeText(detectedOTP.code).then(() => {
+      setOtpCopied(true);
+      setTimeout(() => setOtpCopied(false), 2000);
+    }).catch(() => {});
+  }, [detectedOTP]);
+
   return (
     <div className="animate-slide-right">
       {/* Back button */}
       <button
         onClick={onBack}
-        className="flex items-center gap-1.5 text-xs text-white/25 hover:text-white/50 transition-all mb-5 group"
+        className="flex items-center gap-1.5 text-xs text-white/25 hover:text-white/50 transition-all mb-5 group touch-manipulation"
       >
         <svg className="w-4 h-4 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -47,14 +65,60 @@ const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
         <span className="font-medium">Back</span>
       </button>
 
+      {/* ── OTP Detection Banner ───────────────────── */}
+      {detectedOTP && (
+        <div className="mb-4 p-3.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 animate-fade-in">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-emerald-400/60 font-semibold uppercase tracking-widest mb-0.5">
+                  Verification Code Detected
+                </p>
+                <p className="font-mono text-xl font-bold text-emerald-300 tracking-[0.2em]">
+                  {detectedOTP.code}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleCopyOTP}
+              className={`min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 flex-shrink-0 touch-manipulation ${
+                otpCopied
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-500/20'
+              }`}
+            >
+              {otpCopied ? (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Message header */}
       <div className="space-y-4 mb-5 pb-5 border-b border-white/[0.05]">
         <div className="flex items-start gap-3">
-          {/* Sender avatar */}
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/15">
             <span className="text-white text-xs font-bold">{senderInitial(message.from)}</span>
           </div>
-
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-semibold text-white/90 leading-snug mb-1">
               {message.subject || '(No subject)'}

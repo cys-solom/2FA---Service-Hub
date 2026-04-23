@@ -29,15 +29,7 @@ import {
   logoutAdmin,
 } from '../services/domain-config';
 import { purgeAllFromAPI, cleanupOldFromAPI } from '../services/tempmail-service';
-import {
-  getSubscriptionConfig,
-  addProduct,
-  updateProduct,
-  removeProduct,
-  toggleProductActive,
-  updateSubscriptionSettings,
-} from '../services/subscriptions-service';
-import type { SubscriptionProduct, SubscriptionConfig } from '../services/subscriptions-service';
+
 
 // ─── Login Screen ─────────────────────────────────────────────────
 
@@ -356,8 +348,7 @@ function AdminDashboard() {
             </div>
           </div>
 
-          {/* ── Subscriptions Management ─────────────── */}
-          <SubscriptionsAdmin addToast={addToast} />
+
 
           <div className="h-6" />
         </div>
@@ -487,10 +478,8 @@ function SettingRow({ label, desc, children }: { label: string; desc: string; ch
   );
 }
 
-// ─── Subscriptions Admin ──────────────────────────────────────────
+export default AdminPage;
 
-const PRODUCT_COLORS = [
-  { key: 'blue', label: 'Blue', cls: 'bg-blue-500' },
   { key: 'emerald', label: 'Green', cls: 'bg-emerald-500' },
   { key: 'violet', label: 'Violet', cls: 'bg-violet-500' },
   { key: 'pink', label: 'Pink', cls: 'bg-pink-500' },

@@ -130,4 +130,4 @@ const CyberBackground: React.FC<CyberBackgroundProps> = ({ variant = 'security' 
   );
 };
 
-export default CyberBackground;
+export default React.memo(CyberBackground);
