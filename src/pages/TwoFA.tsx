@@ -1,5 +1,11 @@
 /**
- * 2FA Page — extracted from the original App.tsx
+ * 2FA Page — TOTP code generator with copy/paste for secret & code.
+ *
+ * Layout:
+ *   1. Secret Input  +  Paste / Copy Secret buttons
+ *   2. Generated TOTP Code  +  Copy Code button
+ *   3. Timer bar
+ *   4. Clear button
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -86,30 +92,44 @@ function TwoFAPage() {
     addToast('Secret cleared from memory', 'info');
   }, [addToast]);
 
-  const handleCopy = useCallback(() => {
-    const textToCopy = code || secret;
-    if (textToCopy) {
-      navigator.clipboard.writeText(textToCopy).then(() => {
-        addToast('Copied to clipboard', 'success');
-      }).catch(() => {
-        addToast('Failed to copy', 'error');
-      });
-    } else {
+  // ── Copy / Paste for the SECRET key ──────────────────
+  const handleCopySecret = useCallback(() => {
+    if (!secret) {
       addToast('Nothing to copy', 'error');
+      return;
     }
-  }, [code, secret, addToast]);
+    navigator.clipboard.writeText(secret).then(() => {
+      addToast('Secret copied', 'success');
+    }).catch(() => {
+      addToast('Failed to copy', 'error');
+    });
+  }, [secret, addToast]);
 
-  const handlePaste = useCallback(async () => {
+  const handlePasteSecret = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
         const cleaned = text.replace(/\s/g, '').toUpperCase();
         handleSecretChange(cleaned);
+        addToast('Secret pasted', 'success');
       }
     } catch {
       addToast('Paste failed — please allow clipboard access', 'error');
     }
   }, [handleSecretChange, addToast]);
+
+  // ── Copy the generated TOTP code ─────────────────────
+  const handleCopyCode = useCallback(() => {
+    if (!code) {
+      addToast('No code generated yet', 'error');
+      return;
+    }
+    navigator.clipboard.writeText(code).then(() => {
+      addToast('Code copied!', 'success');
+    }).catch(() => {
+      addToast('Failed to copy', 'error');
+    });
+  }, [code, addToast]);
 
   // Extract secret from URL on mount
   useEffect(() => {
@@ -130,7 +150,7 @@ function TwoFAPage() {
     const tick = () => {
       const remaining = getTimeRemaining(30);
       setTimeRemaining(remaining);
-      
+
       const currentPeriod = Math.floor(Date.now() / 30000);
       if (secret && currentPeriod !== lastPeriod) {
         generateCode(secret);
@@ -181,35 +201,72 @@ function TwoFAPage() {
         <div className="w-full max-w-md">
           <Header />
 
-          <div className="glass-card p-6 sm:p-8 space-y-6 animate-fade-in-up" style={{ animationDelay: '0.15s', opacity: 0 }}>
+          <div className="glass-card p-5 sm:p-8 space-y-5 animate-fade-in-up" style={{ animationDelay: '0.15s', opacity: 0 }}>
+
+            {/* ── Section 1: Secret Input ──────────────── */}
             <div>
               <SecretInput secret={secret} onSecretChange={handleSecretChange} error={error} />
+
+              {/* Paste / Copy SECRET buttons — large touch targets */}
               <div className="flex gap-2 mt-3">
-                <button onClick={handlePaste} className="flex-1 py-2 px-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                  Paste
+                <button
+                  onClick={handlePasteSecret}
+                  className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-white/5 border border-white/10
+                             text-white/60 active:bg-white/15 active:text-white
+                             hover:bg-white/10 hover:text-white
+                             text-xs font-medium transition-all
+                             flex items-center justify-center gap-2
+                             touch-manipulation"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  Paste Secret
                 </button>
-                <button onClick={handleCopy} className="flex-1 py-2 px-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                  Copy
+                <button
+                  onClick={handleCopySecret}
+                  className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-white/5 border border-white/10
+                             text-white/60 active:bg-white/15 active:text-white
+                             hover:bg-white/10 hover:text-white
+                             text-xs font-medium transition-all
+                             flex items-center justify-center gap-2
+                             touch-manipulation"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy Secret
                 </button>
               </div>
             </div>
+
+            {/* ── Divider ─────────────────────────────── */}
             <div className="h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
-            <CodeDisplay code={code} isActive={isActive} onCopy={handleCopy} />
+
+            {/* ── Section 2: Generated Code ────────────── */}
+            <CodeDisplay code={code} isActive={isActive} onCopy={handleCopyCode} />
             <TimerBar timeRemaining={timeRemaining} period={30} isActive={isActive} />
 
+            {/* ── Section 3: Copy Code + Clear ─────────── */}
             {isActive && (
               <div className="flex gap-2.5 animate-fade-in">
-                <button onClick={handleCopy} className="btn-primary-emerald flex-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button
+                  onClick={handleCopyCode}
+                  className="btn-primary-emerald flex-1 min-h-[48px] touch-manipulation"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                   Copy Code
                 </button>
-                <button onClick={handleClear} className="btn-danger px-4">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button
+                  onClick={handleClear}
+                  className="btn-danger min-h-[48px] px-5 touch-manipulation"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>

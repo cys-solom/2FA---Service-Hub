@@ -78,6 +78,8 @@
     @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl 
            font-semibold text-sm transition-all duration-300 focus:outline-none 
            active:scale-[0.97] cursor-pointer;
+    touch-action: manipulation;
+    min-height: 44px;
   }
 
   .btn-primary {
