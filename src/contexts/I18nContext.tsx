@@ -18,6 +18,7 @@ const translations: Record<Lang, Record<string, string>> = {
     'nav.2fa': '2FA Code',
     'nav.mail': 'Service Mail',
     'nav.inbox': 'Inbox',
+    'nav.subs': 'Subscriptions',
 
     // 2FA Page
     '2fa.title': '2FA Code',
@@ -66,6 +67,7 @@ const translations: Record<Lang, Record<string, string>> = {
     'admin.mailCredentials': 'Service Mail Credentials',
     'admin.domains': 'Domains',
     'admin.maintenance': 'Maintenance',
+    'admin.subscriptions': 'Subscriptions',
     'admin.save': 'Save',
     'admin.add': 'Add',
 
@@ -92,6 +94,7 @@ const translations: Record<Lang, Record<string, string>> = {
     'nav.2fa': 'رمز 2FA',
     'nav.mail': 'بريد الخدمة',
     'nav.inbox': 'الوارد',
+    'nav.subs': 'الاشتراكات',
 
     // 2FA Page
     '2fa.title': 'رمز التحقق',
@@ -140,6 +143,7 @@ const translations: Record<Lang, Record<string, string>> = {
     'admin.mailCredentials': 'بيانات بريد الخدمة',
     'admin.domains': 'النطاقات',
     'admin.maintenance': 'الصيانة',
+    'admin.subscriptions': 'الاشتراكات',
     'admin.save': 'حفظ',
     'admin.add': 'إضافة',
 

@@ -8,6 +8,7 @@ import SecretInput from '../components/SecretInput';
 import CodeDisplay from '../components/CodeDisplay';
 import TimerBar from '../components/TimerBar';
 import SecurityNotice from '../components/SecurityNotice';
+import CyberBackground from '../components/CyberBackground';
 import Footer from '../components/Footer';
 import Toast from '../components/Toast';
 import type { ToastData } from '../components/Toast';
@@ -86,14 +87,29 @@ function TwoFAPage() {
   }, [addToast]);
 
   const handleCopy = useCallback(() => {
-    if (code) {
-      navigator.clipboard.writeText(code).then(() => {
-        addToast('Code copied to clipboard', 'success');
+    const textToCopy = code || secret;
+    if (textToCopy) {
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        addToast('Copied to clipboard', 'success');
       }).catch(() => {
         addToast('Failed to copy', 'error');
       });
+    } else {
+      addToast('Nothing to copy', 'error');
     }
-  }, [code, addToast]);
+  }, [code, secret, addToast]);
+
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        const cleaned = text.replace(/\s/g, '').toUpperCase();
+        handleSecretChange(cleaned);
+      }
+    } catch {
+      addToast('Paste failed — please allow clipboard access', 'error');
+    }
+  }, [handleSecretChange, addToast]);
 
   // Extract secret from URL on mount
   useEffect(() => {
@@ -105,34 +121,80 @@ function TwoFAPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Timer
+  // Timer and visibility
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
+
+    let lastPeriod = Math.floor(Date.now() / 30000);
+
     const tick = () => {
       const remaining = getTimeRemaining(30);
       setTimeRemaining(remaining);
-      if (remaining === 30 && secret) {
+      
+      const currentPeriod = Math.floor(Date.now() / 30000);
+      if (secret && currentPeriod !== lastPeriod) {
         generateCode(secret);
+        lastPeriod = currentPeriod;
       }
     };
+
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        tick();
+        if (secret) {
+          generateCode(secret);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+    window.addEventListener('focus', handleFocusOrVisible);
+
     tick();
     intervalRef.current = setInterval(tick, 1000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+      window.removeEventListener('focus', handleFocusOrVisible);
+    };
   }, [secret, generateCode]);
 
   const isActive = !!code && !!secret;
 
   return (
     <div className="min-h-screen relative">
-      <div className="bg-glow" />
-      <div className="grid-pattern fixed inset-0 z-0 pointer-events-none" />
+      {/* Deep space background */}
+      <div className="bg-deep-space">
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+        <div className="orb orb-4" />
+      </div>
+      <div className="stars-layer" />
+      <div className="grid-pattern" />
+      <div className="noise-overlay" />
+      <div className="vignette" />
+      <CyberBackground variant="security" />
 
       <main className="relative z-10 flex items-center justify-center min-h-screen px-4 py-8 pt-24">
         <div className="w-full max-w-md">
           <Header />
 
           <div className="glass-card p-6 sm:p-8 space-y-6 animate-fade-in-up" style={{ animationDelay: '0.15s', opacity: 0 }}>
-            <SecretInput secret={secret} onSecretChange={handleSecretChange} error={error} />
+            <div>
+              <SecretInput secret={secret} onSecretChange={handleSecretChange} error={error} />
+              <div className="flex gap-2 mt-3">
+                <button onClick={handlePaste} className="flex-1 py-2 px-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                  Paste
+                </button>
+                <button onClick={handleCopy} className="flex-1 py-2 px-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                  Copy
+                </button>
+              </div>
+            </div>
             <div className="h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
             <CodeDisplay code={code} isActive={isActive} onCopy={handleCopy} />
             <TimerBar timeRemaining={timeRemaining} period={30} isActive={isActive} />
