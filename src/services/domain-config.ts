@@ -63,6 +63,23 @@ const DEFAULT_CONFIG: AdminConfig = {
       smtpPassword: '',
       smtpTls: true,
     },
+    {
+      id: 'gpt-domain',
+      domain: 'gpt-servicehub.cloud',
+      isActive: true,
+      isPrimary: false,
+      createdAt: Date.now(),
+      imapHost: 'mail.gpt-servicehub.cloud',
+      imapPort: 993,
+      imapUser: 'inbox@gpt-servicehub.cloud',
+      imapPassword: '',
+      imapTls: true,
+      smtpHost: 'mail.gpt-servicehub.cloud',
+      smtpPort: 587,
+      smtpUser: 'inbox@gpt-servicehub.cloud',
+      smtpPassword: '',
+      smtpTls: true,
+    },
   ],
   mailboxTTL: 30,
   maxMailboxes: 5,
@@ -102,6 +119,13 @@ export function getAdminConfig(): AdminConfig {
           d.smtpUser = `inbox@${d.domain}`;
           d.smtpPassword = '';
           d.smtpTls = true;
+          needsSave = true;
+        }
+      }
+      // Migrate: auto-inject default domains that are missing
+      for (const defaultDomain of DEFAULT_CONFIG.domains) {
+        if (!parsed.domains.some(d => d.domain.toLowerCase() === defaultDomain.domain.toLowerCase())) {
+          parsed.domains.push({ ...defaultDomain });
           needsSave = true;
         }
       }

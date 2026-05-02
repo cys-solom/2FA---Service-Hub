@@ -1,10 +1,11 @@
 /**
- * GET /api/mail/inbox?address=xxx@servicehub-mail.cloud
+ * GET /api/mail/inbox?address=xxx@domain.com
  *
  * Fetches the inbox for a specific temp email address via IMAP.
+ * Supports multiple configured mail domains.
  */
 
-import { fetchEmailsForAddress } from '../_lib/imap.js';
+import { fetchEmailsForAddress, getAllowedDomains, extractDomain } from '../_lib/imap.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,9 +19,14 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing "address" query parameter' });
   }
 
-  const domain = process.env.MAIL_DOMAIN || 'servicehub-mail.cloud';
-  if (!address.endsWith(`@${domain}`)) {
-    return res.status(400).json({ error: 'Invalid email domain' });
+  // Validate: domain must be in the list of allowed domains
+  const emailDomain = extractDomain(address);
+  const allowed = getAllowedDomains();
+  if (!emailDomain || !allowed.includes(emailDomain)) {
+    return res.status(400).json({
+      error: 'Invalid email domain',
+      allowedDomains: allowed,
+    });
   }
 
   try {

@@ -13,6 +13,7 @@ import deleteHandler from './api/mail/delete.js';
 import clearHandler from './api/mail/clear.js';
 import purgeHandler from './api/mail/purge.js';
 import cleanupHandler from './api/mail/cleanup.js';
+import { getAllowedDomains, buildImapConfigs } from './api/_lib/imap.js';
 
 const app = express();
 const PORT = 3001;
@@ -28,15 +29,21 @@ app.delete('/api/mail/purge', (req, res) => purgeHandler(req, res));
 app.delete('/api/mail/cleanup', (req, res) => cleanupHandler(req, res));
 
 app.get('/api/health', (req, res) => {
+  const configs = buildImapConfigs();
   res.json({
     status: 'ok',
-    imap: { host: process.env.IMAP_HOST, user: process.env.IMAP_USER },
-    domain: process.env.MAIL_DOMAIN || 'servicehub-mail.cloud',
+    domains: getAllowedDomains(),
+    imapServers: configs.map(c => ({ domain: c.domain, host: c.host, user: c.user })),
   });
 });
 
 app.listen(PORT, () => {
+  const domains = getAllowedDomains();
   console.log(`\n  ✉️  Mail API running → http://localhost:${PORT}`);
-  console.log(`  📮 IMAP: ${process.env.IMAP_USER}@${process.env.IMAP_HOST}`);
-  console.log(`  📬 Domain: ${process.env.MAIL_DOMAIN}\n`);
+  console.log(`  📬 Domains: ${domains.join(', ')}`);
+  const configs = buildImapConfigs();
+  configs.forEach((c, i) => {
+    console.log(`  📮 [${i + 1}] ${c.domain} → ${c.user}@${c.host}`);
+  });
+  console.log('');
 });

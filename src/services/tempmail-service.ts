@@ -100,9 +100,11 @@ async function fetchInboxFromAPI(address: string): Promise<TempMessage[]> {
   }
 }
 
-async function fetchMessageFromAPI(uid: number): Promise<TempMessage | null> {
+async function fetchMessageFromAPI(uid: number, domain?: string): Promise<TempMessage | null> {
   try {
-    const res = await fetch(`/api/mail/message?uid=${uid}`);
+    const params = new URLSearchParams({ uid: String(uid) });
+    if (domain) params.set('domain', domain);
+    const res = await fetch(`/api/mail/message?${params.toString()}`);
     if (!res.ok) return null;
     const data = await res.json();
     if (data.success && data.message) {
@@ -126,9 +128,11 @@ async function fetchMessageFromAPI(uid: number): Promise<TempMessage | null> {
   }
 }
 
-async function deleteMessageFromAPI(uid: number): Promise<boolean> {
+async function deleteMessageFromAPI(uid: number, domain?: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/mail/delete?uid=${uid}`, { method: 'DELETE' });
+    const params = new URLSearchParams({ uid: String(uid) });
+    if (domain) params.set('domain', domain);
+    const res = await fetch(`/api/mail/delete?${params.toString()}`, { method: 'DELETE' });
     const data = await res.json();
     return data.success === true;
   } catch {
@@ -191,13 +195,13 @@ export function createMailbox(): { success: boolean; mailbox?: TempMailbox; erro
 /**
  * Creates a mailbox with a custom prefix.
  */
-export function createCustomMailbox(prefix: string): { success: boolean; mailbox?: TempMailbox; error?: string } {
+export function createCustomMailbox(prefix: string, domain?: string): { success: boolean; mailbox?: TempMailbox; error?: string } {
   const clean = sanitizePrefix(prefix);
   if (!clean || clean.length < 2) {
     return { success: false, error: 'Prefix must be at least 2 characters (letters, numbers, dots, hyphens)' };
   }
 
-  const email = `${clean}@${getPrimaryDomain()}`;
+  const email = `${clean}@${domain || getPrimaryDomain()}`;
   
   // Check if already exists
   const existing = loadMailboxes();
@@ -245,7 +249,10 @@ export function getInbox(mailboxId: string): TempMessage[] {
 }
 
 export async function getFullMessage(uid: number, mailboxId: string): Promise<TempMessage | null> {
-  const msg = await fetchMessageFromAPI(uid);
+  // Determine domain from the mailbox email
+  const mb = getMailbox(mailboxId);
+  const domain = mb?.email?.includes('@') ? mb.email.split('@')[1] : undefined;
+  const msg = await fetchMessageFromAPI(uid, domain);
   if (msg) {
     msg.mailboxId = mailboxId;
     const cached = cachedMessages[mailboxId];
@@ -258,7 +265,10 @@ export async function getFullMessage(uid: number, mailboxId: string): Promise<Te
 }
 
 export async function deleteMessage(uid: number, mailboxId: string): Promise<boolean> {
-  const ok = await deleteMessageFromAPI(uid);
+  // Determine domain from the mailbox email
+  const mb = getMailbox(mailboxId);
+  const domain = mb?.email?.includes('@') ? mb.email.split('@')[1] : undefined;
+  const ok = await deleteMessageFromAPI(uid, domain);
   if (ok && cachedMessages[mailboxId]) {
     cachedMessages[mailboxId] = cachedMessages[mailboxId].filter(m => m.uid !== uid);
   }

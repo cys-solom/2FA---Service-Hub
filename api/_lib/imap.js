@@ -1,32 +1,105 @@
 /**
  * IMAP Helper — shared connection logic for Vercel serverless functions.
  *
- * Connects to the Mailcow IMAP server, runs a callback, then disconnects.
+ * Supports MULTIPLE domains, each with its own IMAP credentials.
+ * Connects to the correct Mailcow IMAP server based on the email domain.
  * Uses the catch-all approach: all emails to *@domain go to one inbox.
  */
 
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 
-const IMAP_CONFIG = {
-  host: process.env.IMAP_HOST || 'mail.servicehub-mail.cloud',
-  port: parseInt(process.env.IMAP_PORT || '993', 10),
-  secure: true,
-  auth: {
-    user: process.env.IMAP_USER || 'inbox@servicehub-mail.cloud',
-    pass: process.env.IMAP_PASS || '',
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  logger: false,
-};
+// ─── Multi-domain IMAP Configs ──────────────────────────────────────
+
+/**
+ * Build the list of IMAP configs from environment variables.
+ * Domain 1: IMAP_HOST, IMAP_PORT, IMAP_USER, IMAP_PASS, MAIL_DOMAIN
+ * Domain N: IMAP_HOST_N, IMAP_PORT_N, IMAP_USER_N, IMAP_PASS_N, MAIL_DOMAIN_N
+ */
+function buildImapConfigs() {
+  const configs = [];
+
+  // Domain 1 (primary)
+  if (process.env.IMAP_HOST) {
+    configs.push({
+      domain: (process.env.MAIL_DOMAIN || 'servicehub-mail.cloud').toLowerCase(),
+      host: process.env.IMAP_HOST,
+      port: parseInt(process.env.IMAP_PORT || '993', 10),
+      user: process.env.IMAP_USER || '',
+      pass: process.env.IMAP_PASS || '',
+    });
+  }
+
+  // Domain 2..N
+  for (let i = 2; i <= 10; i++) {
+    const host = process.env[`IMAP_HOST_${i}`];
+    const domain = process.env[`MAIL_DOMAIN_${i}`];
+    if (host && domain) {
+      configs.push({
+        domain: domain.toLowerCase(),
+        host,
+        port: parseInt(process.env[`IMAP_PORT_${i}`] || '993', 10),
+        user: process.env[`IMAP_USER_${i}`] || '',
+        pass: process.env[`IMAP_PASS_${i}`] || '',
+      });
+    }
+  }
+
+  return configs;
+}
+
+/** Get the IMAP FlowConfig for a specific domain */
+function getImapFlowConfig(domainName) {
+  const configs = buildImapConfigs();
+  const match = configs.find(c => c.domain === domainName?.toLowerCase());
+
+  // Fallback to primary if no match
+  const cfg = match || configs[0] || {
+    host: 'mail.servicehub-mail.cloud',
+    port: 993,
+    user: 'inbox@servicehub-mail.cloud',
+    pass: '',
+  };
+
+  return {
+    host: cfg.host,
+    port: cfg.port,
+    secure: true,
+    auth: { user: cfg.user, pass: cfg.pass },
+    tls: { rejectUnauthorized: false },
+    logger: false,
+  };
+}
+
+/** Returns the list of all allowed mail domains */
+function getAllowedDomains() {
+  // Prefer the explicit MAIL_DOMAINS list
+  if (process.env.MAIL_DOMAINS) {
+    return process.env.MAIL_DOMAINS.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+  }
+  // Fallback: derive from IMAP configs
+  return buildImapConfigs().map(c => c.domain);
+}
+
+/** Extract the domain part from an email address */
+function extractDomain(address) {
+  if (!address || !address.includes('@')) return null;
+  return address.split('@')[1].toLowerCase();
+}
+
+// Legacy single-config export (for backward compat)
+const IMAP_CONFIG = getImapFlowConfig(process.env.MAIL_DOMAIN || 'servicehub-mail.cloud');
+
+// ─── Core IMAP Connection ──────────────────────────────────────────
 
 /**
  * Executes a callback with an authenticated IMAP connection.
+ * @param {Function} callback  — receives the ImapFlow client
+ * @param {string}   [domain]  — optional domain to select the right IMAP server
  */
-async function withImap(callback) {
-  const client = new ImapFlow(IMAP_CONFIG);
+async function withImap(callback, domain) {
+  const config = domain ? getImapFlowConfig(domain) : IMAP_CONFIG;
+  const client = new ImapFlow(config);
   try {
     await client.connect();
     const result = await callback(client);
@@ -40,9 +113,10 @@ async function withImap(callback) {
 
 /**
  * Fetches emails for a specific recipient address from INBOX.
- * Uses UID-based operations throughout to ensure correct message identification.
+ * Automatically connects to the correct IMAP server based on the email domain.
  */
 async function fetchEmailsForAddress(address, limit = 20) {
+  const domain = extractDomain(address);
   return withImap(async (client) => {
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -92,14 +166,14 @@ async function fetchEmailsForAddress(address, limit = 20) {
     } finally {
       lock.release();
     }
-  });
+  }, domain);
 }
 
 /**
  * Fetches a full email message by UID including body content.
- * Uses UID-based fetch to ensure the correct message is returned.
+ * Optionally provide the domain to connect to the correct server.
  */
-async function fetchMessageByUid(uid) {
+async function fetchMessageByUid(uid, domain) {
   return withImap(async (client) => {
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -168,13 +242,14 @@ async function fetchMessageByUid(uid) {
     } finally {
       lock.release();
     }
-  });
+  }, domain);
 }
 
 /**
  * Deletes a specific message by UID.
+ * Optionally provide the domain to connect to the correct server.
  */
-async function deleteMessageByUid(uid) {
+async function deleteMessageByUid(uid, domain) {
   return withImap(async (client) => {
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -183,31 +258,45 @@ async function deleteMessageByUid(uid) {
     } finally {
       lock.release();
     }
-  });
+  }, domain);
 }
 
 /**
  * Deletes ALL messages in the INBOX (admin purge).
+ * Purges from ALL configured IMAP servers.
  */
 async function purgeAllMessages() {
-  return withImap(async (client) => {
-    const lock = await client.getMailboxLock('INBOX');
+  const configs = buildImapConfigs();
+  let totalDeleted = 0;
+
+  for (const cfg of configs) {
     try {
-      const all = await client.search({ all: true });
-      if (all && all.length > 0) {
-        await client.messageDelete({ seq: all.join(',') });
-      }
-      return all ? all.length : 0;
-    } finally {
-      lock.release();
+      const count = await withImap(async (client) => {
+        const lock = await client.getMailboxLock('INBOX');
+        try {
+          const all = await client.search({ all: true });
+          if (all && all.length > 0) {
+            await client.messageDelete({ seq: all.join(',') });
+          }
+          return all ? all.length : 0;
+        } finally {
+          lock.release();
+        }
+      }, cfg.domain);
+      totalDeleted += count;
+    } catch (err) {
+      console.error(`Purge error for domain ${cfg.domain}:`, err.message);
     }
-  });
+  }
+
+  return totalDeleted;
 }
 
 /**
  * Deletes ALL messages for a specific TO address.
  */
 async function deleteMessagesForAddress(address) {
+  const domain = extractDomain(address);
   return withImap(async (client) => {
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -228,35 +317,61 @@ async function deleteMessagesForAddress(address) {
     } finally {
       lock.release();
     }
-  });
+  }, domain);
 }
 
 /**
  * Deletes messages older than N days from INBOX.
+ * Cleans up ALL configured IMAP servers.
  */
 async function purgeOldMessages(days = 30) {
-  return withImap(async (client) => {
-    const lock = await client.getMailboxLock('INBOX');
+  const configs = buildImapConfigs();
+  let totalDeleted = 0;
+
+  for (const cfg of configs) {
     try {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - days);
-      const results = await client.search({ before: cutoff });
-      let count = 0;
-      if (results && results.length > 0) {
-        for (const seq of results) {
-          try {
-            for await (const msg of client.fetch(String(seq), { uid: true })) {
-              await client.messageDelete({ uid: msg.uid }, { uid: true });
-              count++;
+      const count = await withImap(async (client) => {
+        const lock = await client.getMailboxLock('INBOX');
+        try {
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - days);
+          const results = await client.search({ before: cutoff });
+          let deleted = 0;
+          if (results && results.length > 0) {
+            for (const seq of results) {
+              try {
+                for await (const msg of client.fetch(String(seq), { uid: true })) {
+                  await client.messageDelete({ uid: msg.uid }, { uid: true });
+                  deleted++;
+                }
+              } catch { /* skip */ }
             }
-          } catch { /* skip */ }
+          }
+          return deleted;
+        } finally {
+          lock.release();
         }
-      }
-      return count;
-    } finally {
-      lock.release();
+      }, cfg.domain);
+      totalDeleted += count;
+    } catch (err) {
+      console.error(`Cleanup error for domain ${cfg.domain}:`, err.message);
     }
-  });
+  }
+
+  return totalDeleted;
 }
 
-export { withImap, fetchEmailsForAddress, fetchMessageByUid, deleteMessageByUid, deleteMessagesForAddress, purgeAllMessages, purgeOldMessages, IMAP_CONFIG };
+export {
+  withImap,
+  fetchEmailsForAddress,
+  fetchMessageByUid,
+  deleteMessageByUid,
+  deleteMessagesForAddress,
+  purgeAllMessages,
+  purgeOldMessages,
+  getAllowedDomains,
+  extractDomain,
+  getImapFlowConfig,
+  buildImapConfigs,
+  IMAP_CONFIG,
+};

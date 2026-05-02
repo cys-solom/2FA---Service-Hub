@@ -91,7 +91,7 @@ function ReceiveCodePage() {
     // Find or create mailbox
     let mb = getAllMailboxes().find(m => m.email === fullAddr);
     if (!mb) {
-      const result = createCustomMailbox(fullAddr.split('@')[0]);
+      const result = createCustomMailbox(fullAddr.split('@')[0], fullAddr.split('@')[1]);
       if (result.success && result.mailbox) mb = result.mailbox;
     }
 
