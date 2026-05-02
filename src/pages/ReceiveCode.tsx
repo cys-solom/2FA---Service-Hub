@@ -25,13 +25,14 @@ import {
   getUnreadCount,
   deleteMessage,
 } from '../services/tempmail-service';
-import { getPrimaryDomain, getActiveDomains } from '../services/domain-config';
+import { getActiveDomains } from '../services/domain-config';
 import { playNotificationSound, updateTabBadge } from '../utils/email-utils';
 
 function ReceiveCodePage() {
   const { address: urlAddress } = useParams<{ address?: string }>();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [selectedDomain, setSelectedDomain] = useState('');
   const [activeEmail, setActiveEmail] = useState<string | null>(null);
   const [mailboxId, setMailboxId] = useState<string | null>(null);
   const [messages, setMessages] = useState<TempMessage[]>([]);
@@ -49,8 +50,17 @@ function ReceiveCodePage() {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevMsgCountRef = useRef(0);
 
-  const domain = getPrimaryDomain();
   const activeDomains = getActiveDomains().map(d => d.domain);
+
+  // Initialize selectedDomain with primary domain
+  useEffect(() => {
+    if (!selectedDomain && activeDomains.length > 0) {
+      setSelectedDomain(activeDomains[0]);
+    }
+  }, [activeDomains, selectedDomain]);
+
+  // Construct full email from username + selectedDomain
+  const fullEmail = username.trim() ? `${username.trim()}@${selectedDomain}` : '';
 
   const addToast = useCallback((message: string, type: ToastData['type'] = 'success') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -67,10 +77,13 @@ function ReceiveCodePage() {
     if (!fullAddr) return;
     setEmailError(null);
 
-    // Validate: must contain @
+    // If the address doesn't contain @, construct it from username + selectedDomain
     if (!fullAddr.includes('@')) {
-      setEmailError(`Please enter the full email address (e.g. name@${domain})`);
-      return;
+      if (!selectedDomain) {
+        setEmailError('Please select a domain');
+        return;
+      }
+      fullAddr = `${fullAddr}@${selectedDomain}`;
     }
 
     // Validate: domain must be in active domains
@@ -80,10 +93,17 @@ function ReceiveCodePage() {
       return;
     }
 
+    // Validate username part
+    const userPart = fullAddr.split('@')[0];
+    if (!userPart || userPart.length < 2) {
+      setEmailError('Username must be at least 2 characters');
+      return;
+    }
+
     setIsLoading(true);
     setActiveEmail(fullAddr);
     setSelectedMessage(null);
-    setEmail('');
+    setUsername('');
 
     // Update URL
     navigate(`/receive-code/${encodeURIComponent(fullAddr)}`, { replace: true });
@@ -102,7 +122,7 @@ function ReceiveCodePage() {
       setUnreadCount(getUnreadCount(mb.id));
     }
     setIsLoading(false);
-  }, [domain, activeDomains, navigate]);
+  }, [selectedDomain, activeDomains, navigate]);
 
   // Handle URL address on mount
   useEffect(() => {
@@ -176,9 +196,24 @@ function ReceiveCodePage() {
     };
   }, [mailboxId]);
 
+  // Parse a pasted/typed full email into username + domain
+  const parseAndSetEmail = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.includes('@')) {
+      const [user, dom] = trimmed.split('@');
+      setUsername(user);
+      if (dom && activeDomains.includes(dom.toLowerCase())) {
+        setSelectedDomain(dom.toLowerCase());
+      }
+    } else {
+      setUsername(trimmed);
+    }
+    setEmailError(null);
+  }, [activeDomains]);
+
   // Copy and Paste Handlers
   const handleCopy = useCallback(async () => {
-    const textToCopy = activeEmail || email;
+    const textToCopy = activeEmail || fullEmail;
     if (!textToCopy) {
       addToast('Nothing to copy', 'error');
       return;
@@ -189,15 +224,14 @@ function ReceiveCodePage() {
     } catch {
       addToast('Failed to copy', 'error');
     }
-  }, [activeEmail, email, addToast]);
+  }, [activeEmail, fullEmail, addToast]);
 
   const handlePaste = useCallback(async () => {
     // Try Clipboard API first
     try {
       const text = await navigator.clipboard.readText();
       if (text && text.trim()) {
-        setEmail(text.trim());
-        setEmailError(null);
+        parseAndSetEmail(text);
         addToast('Email pasted', 'success');
         return;
       }
@@ -207,17 +241,16 @@ function ReceiveCodePage() {
     setPasteInput('');
     setShowPasteModal(true);
     setTimeout(() => pasteInputRef.current?.focus(), 100);
-  }, [addToast]);
+  }, [addToast, parseAndSetEmail]);
 
   const handleConfirmPaste = useCallback(() => {
     if (pasteInput.trim()) {
-      setEmail(pasteInput.trim());
-      setEmailError(null);
+      parseAndSetEmail(pasteInput);
       addToast('Email pasted', 'success');
     }
     setShowPasteModal(false);
     setPasteInput('');
-  }, [pasteInput, addToast]);
+  }, [pasteInput, addToast, parseAndSetEmail]);
 
   // Manual refresh
   const handleRefresh = useCallback(async () => {
@@ -298,28 +331,57 @@ function ReceiveCodePage() {
 
           {/* ── Email Input ────────────────────────────── */}
           <div className="glass-card p-5 sm:p-6 mb-4 animate-fade-in-up" style={{ animationDelay: '0.1s', opacity: 0 }}>
+            {/* Username + @ + Domain Dropdown + Check */}
             <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/15">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              <div className="flex-1 flex items-stretch rounded-2xl bg-white/[0.03] border border-white/[0.08] focus-within:border-cyan-500/30 focus-within:bg-white/[0.05] transition-all overflow-hidden">
+                {/* Username input */}
+                <div className="relative flex-1 min-w-0">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/15">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={e => { setUsername(e.target.value.replace(/[@\s]/g, '')); setEmailError(null); }}
+                    onKeyDown={e => e.key === 'Enter' && loadInbox(username)}
+                    placeholder="username"
+                    className="w-full bg-transparent text-sm text-white/90 placeholder-white/20 py-3.5 pl-10 pr-2 outline-none font-mono"
+                    autoFocus
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+
+                {/* @ separator */}
+                <div className="flex items-center px-1">
+                  <span className="text-white/20 text-sm font-mono font-bold select-none">@</span>
+                </div>
+
+                {/* Domain selector */}
+                <div className="relative flex items-center">
+                  <select
+                    value={selectedDomain}
+                    onChange={e => setSelectedDomain(e.target.value)}
+                    className="appearance-none bg-transparent text-xs text-cyan-300/80 font-mono py-3.5 pl-2 pr-7 outline-none cursor-pointer hover:text-cyan-300 transition-colors"
+                  >
+                    {activeDomains.map(d => (
+                      <option key={d} value={d} className="bg-[#0a0f1a] text-white">{d}</option>
+                    ))}
+                  </select>
+                  <svg className="absolute right-2 w-3 h-3 text-white/20 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => { setEmail(e.target.value); setEmailError(null); }}
-                  onKeyDown={e => e.key === 'Enter' && loadInbox(email)}
-                  placeholder={`your-email@${domain}`}
-                  className="input-field !py-3.5 text-sm !pl-11"
-                  autoFocus
-                />
               </div>
+
+              {/* Check button */}
               <button
-                onClick={() => loadInbox(email)}
-                disabled={isLoading || !email.trim()}
-                className="btn-primary-cyan !px-6 !py-3.5 flex-shrink-0"
+                onClick={() => loadInbox(username)}
+                disabled={isLoading || !username.trim()}
+                className="btn-primary-cyan !px-5 !py-3.5 flex-shrink-0"
               >
                 {isLoading ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -334,14 +396,24 @@ function ReceiveCodePage() {
               </button>
             </div>
 
+            {/* Preview: show the full email being constructed */}
+            {username.trim() && (
+              <div className="mt-2.5 flex items-center gap-2 animate-fade-in">
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/40 animate-pulse" />
+                <span className="text-[11px] font-mono text-white/25 truncate">
+                  {fullEmail}
+                </span>
+              </div>
+            )}
+
             <div className="flex gap-2 mt-3">
-              <button onClick={handlePaste} className="flex-1 min-h-[48px] py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-white/60 active:bg-white/15 active:text-white hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2 touch-manipulation">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                Paste Email
+              <button onClick={handlePaste} className="flex-1 min-h-[44px] py-2 px-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white/40 active:bg-white/15 active:text-white hover:bg-white/[0.06] hover:text-white/60 text-xs font-medium transition-all flex items-center justify-center gap-2 touch-manipulation">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                Paste
               </button>
-              <button onClick={handleCopy} className="flex-1 min-h-[48px] py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-white/60 active:bg-white/15 active:text-white hover:bg-white/10 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-2 touch-manipulation">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                Copy Email
+              <button onClick={handleCopy} className="flex-1 min-h-[44px] py-2 px-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white/40 active:bg-white/15 active:text-white hover:bg-white/[0.06] hover:text-white/60 text-xs font-medium transition-all flex items-center justify-center gap-2 touch-manipulation">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                Copy
               </button>
             </div>
 
