@@ -203,10 +203,12 @@ export function createCustomMailbox(prefix: string, domain?: string): { success:
 
   const email = `${clean}@${domain || getPrimaryDomain()}`;
   
-  // Check if already exists
+  // Check if already exists (case-insensitive)
   const existing = loadMailboxes();
-  if (existing.some(m => m.email === email)) {
-    return { success: false, error: 'This email address already exists in your list' };
+  const found = existing.find(m => m.email.toLowerCase() === email.toLowerCase());
+  if (found) {
+    // Return the existing mailbox so callers can use it
+    return { success: true, mailbox: found };
   }
 
   return createMailboxWithEmail(email);

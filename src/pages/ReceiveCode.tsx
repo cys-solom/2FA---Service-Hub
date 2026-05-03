@@ -73,7 +73,7 @@ function ReceiveCodePage() {
 
   // Load inbox for an email address
   const loadInbox = useCallback(async (addr: string) => {
-    let fullAddr = addr.trim();
+    let fullAddr = addr.trim().toLowerCase();
     if (!fullAddr) return;
     setEmailError(null);
 
@@ -108,8 +108,8 @@ function ReceiveCodePage() {
     // Update URL
     navigate(`/receive-code/${encodeURIComponent(fullAddr)}`, { replace: true });
 
-    // Find or create mailbox
-    let mb = getAllMailboxes().find(m => m.email === fullAddr);
+    // Find or create mailbox (case-insensitive lookup)
+    let mb = getAllMailboxes().find(m => m.email.toLowerCase() === fullAddr);
     if (!mb) {
       const result = createCustomMailbox(fullAddr.split('@')[0], fullAddr.split('@')[1]);
       if (result.success && result.mailbox) mb = result.mailbox;
@@ -334,7 +334,7 @@ function ReceiveCodePage() {
             {/* Username + @ + Domain Dropdown + Check */}
             <div className="flex gap-2">
               <div className="flex-1 flex items-stretch rounded-2xl bg-white/[0.03] border border-white/[0.08] focus-within:border-cyan-500/30 focus-within:bg-white/[0.05] transition-all overflow-hidden">
-                {/* Username input */}
+                {/* Username input (also accepts full email) */}
                 <div className="relative flex-1 min-w-0">
                   <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/15">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -345,9 +345,22 @@ function ReceiveCodePage() {
                   <input
                     type="text"
                     value={username}
-                    onChange={e => { setUsername(e.target.value.replace(/[@\s]/g, '')); setEmailError(null); }}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\s/g, '');
+                      // If user types or pastes a full email, auto-split into username + domain
+                      if (val.includes('@')) {
+                        const [user, dom] = val.split('@');
+                        setUsername(user);
+                        if (dom && activeDomains.includes(dom.toLowerCase())) {
+                          setSelectedDomain(dom.toLowerCase());
+                        }
+                      } else {
+                        setUsername(val);
+                      }
+                      setEmailError(null);
+                    }}
                     onKeyDown={e => e.key === 'Enter' && loadInbox(username)}
-                    placeholder="username"
+                    placeholder="username or full email"
                     className="w-full bg-transparent text-sm text-white/90 placeholder-white/20 py-3.5 pl-10 pr-2 outline-none font-mono"
                     autoFocus
                     autoComplete="off"
