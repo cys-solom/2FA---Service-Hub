@@ -1,51 +1,115 @@
 /**
  * OTP Detection — Extracts OTP/verification codes from email subjects and bodies.
  * 
- * Patterns detected:
- *   - "Your code is 482957"
- *   - "Verification: 739201"
- *   - "OTP: 1234"
- *   - "رمز التحقق: 567890"
- *   - Standalone 4-8 digit numbers
+ * Enhanced patterns for:
+ *   - ChatGPT / OpenAI: "Your login code is 482957"
+ *   - Adobe: "Use this code: 739201" or "verification code: 123456"
+ *   - Grok / xAI: "confirmation code: 123456"
+ *   - Google: "G-739201"
+ *   - Microsoft: "Security code: 123456"
+ *   - Generic OTP / PIN / passcode patterns
+ *   - Arabic keywords
+ *   - Codes inside HTML <b>, <strong>, <code> tags
+ *   - Codes on standalone lines
  */
 
-const OTP_PATTERNS = [
-  // "code is 123456", "code: 123456", "code 123456"
-  /(?:code|码|رمز|كود)[\s:：is]*(\d{4,8})/i,
-  // "OTP: 123456", "OTP is 123456"
-  /(?:OTP|otp)[\s:：is]*(\d{4,8})/i,
-  // "verification: 123456"
-  /(?:verification|verify|تحقق)[\s:：]*(\d{4,8})/i,
-  // "PIN: 1234"
-  /(?:PIN|pin)[\s:：]*(\d{4,8})/i,
-  // "123456 is your code"
-  /(\d{4,8})\s+(?:is your|هو|est votre)/i,
-  // "Use 123456 to"
-  /(?:Use|Enter|استخدم)\s+(\d{4,8})\s/i,
+// High-confidence: keyword-based patterns (order matters — most specific first)
+const OTP_PATTERNS: RegExp[] = [
+  // "login code is 123456" or "login code: 123456" (ChatGPT)
+  /login\s+code\s+(?:is\s+)?(\d{4,8})/i,
+  /access\s+code\s*[:\s]\s*(\d{4,8})/i,
+  // "verification code: 123456" or "verification code is 123456" (Adobe, generic)
+  /verification\s+code\s*[:\sis]+(\d{4,8})/i,
+  /security\s+code\s*[:\sis]+(\d{4,8})/i,
+  /confirmation\s+code\s*[:\sis]+(\d{4,8})/i,
+  // "your code is 123456" / "your code: 123456" / "the code: 123456"
+  /(?:your|the)\s+code\s*[:\sis]+(\d{4,8})/i,
+  // "use this code: 123456" / "enter this code: 123456" / "use code 123456"
+  /(?:use|enter)\s+(?:this\s+)?code\s*[:\sis]+(\d{4,8})/i,
+  // "code is 123456" / "code: 123456" / "code = 123456"
+  /\bcode\s*[:=]\s*(\d{4,8})\b/i,
+  /\bcode\s+is\s+(\d{4,8})\b/i,
+  // OTP / PIN / passcode / token
+  /\bOTP\s*[:\sis]+(\d{4,8})\b/i,
+  /\bPIN\s*[:\sis]+(\d{4,8})\b/i,
+  /\bpasscode\s*[:\sis]+(\d{4,8})\b/i,
+  /\btoken\s*[:\sis]+(\d{4,8})\b/i,
+  /\b(?:one[- ]time)\s+(?:password|code)\s*[:\sis]+(\d{4,8})\b/i,
+  /\b(?:2FA|MFA)\s*[:\sis]+(\d{4,8})\b/i,
+  // "123456 is your code" / "123456 is your verification code"
+  /(\d{4,8})\s+is\s+your\s+(?:\w+\s+)?code/i,
+  // "Use 123456 to" / "Enter 123456 to"
+  /(?:Use|Enter)\s+(\d{4,8})\s+(?:to|for|as)/i,
   // G-123456 (Google style)
   /G-(\d{4,8})/,
-  // Standalone code in subject (common pattern)
-  /\b(\d{5,8})\b/,
+  // Arabic
+  /(?:رمز|كود|رقم)\s*(?:التحقق|الدخول|التأكيد|الأمان)?\s*[:\s]\s*(\d{4,8})/,
+  /(\d{4,8})\s+(?:هو\s+)?(?:رمز|كود)/,
+  // Chinese
+  /(?:验证码|码)[：:\s]*(\d{4,8})/,
 ];
 
+// Codes inside HTML emphasis tags
+const HTML_TAG_PATTERNS: RegExp[] = [
+  /<b[^>]*>\s*(\d{4,8})\s*<\/b>/i,
+  /<strong[^>]*>\s*(\d{4,8})\s*<\/strong>/i,
+  /<code[^>]*>\s*(\d{4,8})\s*<\/code>/i,
+  /<span[^>]*(?:font-size|font-weight|letter-spacing)[^>]*>\s*(\d{4,8})\s*<\/span>/i,
+];
+
+// Standalone 5-8 digit code (fallback — only used in subject)
+const STANDALONE_SUBJECT = /\b(\d{5,8})\b/;
+
+function stripHtmlQuick(text: string): string {
+  return text
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function extractOTP(subject: string, textBody?: string): string | null {
-  // Try subject first (most reliable)
+  // 1. Try keyword patterns on subject (most reliable)
   for (const pattern of OTP_PATTERNS) {
     const match = subject.match(pattern);
-    if (match && match[1]) {
-      return match[1];
+    if (match && match[1]) return match[1];
+  }
+
+  // 2. Try body — scan first 2000 chars (was 500)
+  if (textBody) {
+    const bodySnippet = textBody.slice(0, 2000);
+
+    // 2a. Check HTML emphasis tags BEFORE stripping (codes in <b>, <strong>, etc.)
+    for (const pattern of HTML_TAG_PATTERNS) {
+      const match = bodySnippet.match(pattern);
+      if (match && match[1]) return match[1];
+    }
+
+    // 2b. Strip HTML and try keyword patterns
+    const plainBody = stripHtmlQuick(bodySnippet);
+
+    for (const pattern of OTP_PATTERNS) {
+      const match = plainBody.match(pattern);
+      if (match && match[1]) return match[1];
+    }
+
+    // 2c. Check for code on its own line
+    const lines = plainBody.split(/[\n\r]+/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (/^\d{4,8}$/.test(trimmed) && !/^20[2-3]\d$/.test(trimmed)) {
+        return trimmed;
+      }
     }
   }
 
-  // Try body (first 500 chars only)
-  if (textBody) {
-    const snippet = textBody.slice(0, 500);
-    for (const pattern of OTP_PATTERNS.slice(0, -1)) { // Skip standalone pattern for body
-      const match = snippet.match(pattern);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
+  // 3. Fallback: standalone 5-8 digit in subject only
+  const subjectMatch = subject.match(STANDALONE_SUBJECT);
+  if (subjectMatch && subjectMatch[1] && !/^20[2-3]\d$/.test(subjectMatch[1])) {
+    return subjectMatch[1];
   }
 
   return null;
