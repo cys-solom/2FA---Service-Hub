@@ -11,11 +11,13 @@
  * Performance:
  *   - Lazy-loaded pages for code splitting
  *   - Suspense with loading fallback
+ *   - Error boundaries per page to prevent full-page crashes
  */
 
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Navigation from './components/Navigation';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy-loaded pages for code splitting
 const TwoFAPage = lazy(() => import('./pages/TwoFA'));
@@ -41,13 +43,13 @@ function App() {
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Navigate to="/2fa-code" replace />} />
-          <Route path="/2fa-code" element={<TwoFAPage />} />
-          <Route path="/2fa-code/:secret" element={<TwoFAPage />} />
-          <Route path="/receive-code" element={<ReceiveCodePage />} />
-          <Route path="/receive-code/:address" element={<ReceiveCodePage />} />
-          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/2fa-code" element={<ErrorBoundary fallbackTitle="2FA Generator Error"><TwoFAPage /></ErrorBoundary>} />
+          <Route path="/2fa-code/:secret" element={<ErrorBoundary fallbackTitle="2FA Generator Error"><TwoFAPage /></ErrorBoundary>} />
+          <Route path="/receive-code" element={<ErrorBoundary fallbackTitle="Inbox Error"><ReceiveCodePage /></ErrorBoundary>} />
+          <Route path="/receive-code/:address" element={<ErrorBoundary fallbackTitle="Inbox Error"><ReceiveCodePage /></ErrorBoundary>} />
+          <Route path="/admin" element={<ErrorBoundary fallbackTitle="Admin Panel Error"><AdminPage /></ErrorBoundary>} />
           {/* Fallback: treat unknown paths as 2FA secret for backward compat */}
-          <Route path="/:secret" element={<TwoFAPage />} />
+          <Route path="/:secret" element={<ErrorBoundary fallbackTitle="2FA Generator Error"><TwoFAPage /></ErrorBoundary>} />
         </Routes>
       </Suspense>
     </BrowserRouter>
@@ -55,3 +57,4 @@ function App() {
 }
 
 export default App;
+

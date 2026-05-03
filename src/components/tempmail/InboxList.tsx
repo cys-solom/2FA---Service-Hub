@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import type { TempMessage } from '../../services/tempmail-service';
 import { extractOTP, classifyEmail, CATEGORIES } from '../../utils/email-utils';
+import SenderAvatar from './SenderAvatar';
 
 interface InboxListProps {
   messages: TempMessage[];
@@ -23,26 +24,6 @@ function senderName(from: string): string {
   const match = from.match(/^(.+?)\s*</);
   if (match) return match[1].replace(/"/g, '').trim();
   return from.split('@')[0];
-}
-
-function senderInitial(from: string): string {
-  const name = senderName(from);
-  return name.charAt(0).toUpperCase();
-}
-
-const AVATAR_COLORS = [
-  'from-violet-500 to-purple-600',
-  'from-blue-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-amber-500 to-orange-600',
-  'from-pink-500 to-rose-600',
-  'from-cyan-500 to-blue-600',
-];
-
-function getAvatarColor(from: string): string {
-  let hash = 0;
-  for (let i = 0; i < from.length; i++) hash = from.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -104,9 +85,7 @@ const InboxList: React.FC<InboxListProps> = ({ messages, selectedId, onSelect })
           >
             <div className="flex items-start gap-3">
               {/* Avatar */}
-              <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${getAvatarColor(msg.from)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-                <span className="text-white text-[10px] font-bold">{senderInitial(msg.from)}</span>
-              </div>
+              <SenderAvatar from={msg.from} size="sm" />
 
               <div className="flex-1 min-w-0">
                 {/* Sender & time */}

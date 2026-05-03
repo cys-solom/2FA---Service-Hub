@@ -90,23 +90,101 @@ function extractDomain(address) {
 // Legacy single-config export (for backward compat)
 const IMAP_CONFIG = getImapFlowConfig(process.env.MAIL_DOMAIN || 'servicehub-mail.cloud');
 
+// ─── Connection Pool ───────────────────────────────────────────────
+
+/**
+ * IMAP Connection Pool — reuses connections within a 30-second TTL.
+ * Each domain gets its own cached connection.
+ * Connections are automatically cleaned up when stale.
+ */
+const connectionPool = new Map(); // domain → { client, lastUsed, connecting }
+const POOL_TTL_MS = 30_000; // 30 seconds
+const CONNECT_TIMEOUT_MS = 10_000; // 10 seconds
+
+/** Clean up stale connections periodically */
+function cleanupPool() {
+  const now = Date.now();
+  for (const [domain, entry] of connectionPool.entries()) {
+    if (now - entry.lastUsed > POOL_TTL_MS && !entry.inUse) {
+      try { entry.client.logout(); } catch { /* ignore */ }
+      connectionPool.delete(domain);
+    }
+  }
+}
+
+// Run cleanup every 15 seconds
+setInterval(cleanupPool, 15_000);
+
+/** Get or create a pooled IMAP connection for a domain */
+async function getPooledClient(domain) {
+  const key = (domain || 'primary').toLowerCase();
+  const existing = connectionPool.get(key);
+
+  // Reuse existing connected client
+  if (existing && existing.client && !existing.client.closed) {
+    existing.lastUsed = Date.now();
+    return existing.client;
+  }
+
+  // Clean up broken entry
+  if (existing) {
+    try { existing.client.logout(); } catch { /* ignore */ }
+    connectionPool.delete(key);
+  }
+
+  // Create new connection with timeout
+  const config = domain ? getImapFlowConfig(domain) : IMAP_CONFIG;
+  const client = new ImapFlow(config);
+
+  const connectPromise = client.connect();
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`IMAP connect timeout for ${key}`)), CONNECT_TIMEOUT_MS)
+  );
+
+  await Promise.race([connectPromise, timeoutPromise]);
+
+  connectionPool.set(key, {
+    client,
+    lastUsed: Date.now(),
+    inUse: false,
+  });
+
+  // Auto-cleanup on connection close
+  client.on('close', () => {
+    connectionPool.delete(key);
+  });
+
+  return client;
+}
+
 // ─── Core IMAP Connection ──────────────────────────────────────────
 
 /**
  * Executes a callback with an authenticated IMAP connection.
+ * Uses connection pooling for better performance.
  * @param {Function} callback  — receives the ImapFlow client
  * @param {string}   [domain]  — optional domain to select the right IMAP server
  */
 async function withImap(callback, domain) {
-  const config = domain ? getImapFlowConfig(domain) : IMAP_CONFIG;
-  const client = new ImapFlow(config);
+  const key = (domain || 'primary').toLowerCase();
+  let client;
   try {
-    await client.connect();
+    client = await getPooledClient(domain);
+    const entry = connectionPool.get(key);
+    if (entry) entry.inUse = true;
+
     const result = await callback(client);
-    await client.logout();
+
+    if (entry) entry.inUse = false;
     return result;
   } catch (error) {
-    try { await client.logout(); } catch { /* ignore */ }
+    // On error, remove the broken connection from pool
+    const entry = connectionPool.get(key);
+    if (entry) {
+      entry.inUse = false;
+      try { entry.client.logout(); } catch { /* ignore */ }
+      connectionPool.delete(key);
+    }
     throw error;
   }
 }

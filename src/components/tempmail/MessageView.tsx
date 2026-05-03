@@ -2,6 +2,7 @@ import React, { useMemo, useCallback, useState } from 'react';
 import DOMPurify from 'dompurify';
 import type { TempMessage } from '../../services/tempmail-service';
 import { extractOTP } from '../../utils/otp-extractor';
+import SenderAvatar from './SenderAvatar';
 
 interface MessageViewProps {
   message: TempMessage;
@@ -13,12 +14,6 @@ function formatDate(timestamp: number): string {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
-}
-
-function senderInitial(from: string): string {
-  const match = from.match(/^(.+?)\s*</);
-  const name = match ? match[1].replace(/"/g, '').trim() : from.split('@')[0];
-  return name.charAt(0).toUpperCase();
 }
 
 const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
@@ -116,9 +111,7 @@ const MessageView: React.FC<MessageViewProps> = ({ message, onBack }) => {
       {/* Message header */}
       <div className="space-y-4 mb-5 pb-5 border-b border-white/[0.05]">
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/15">
-            <span className="text-white text-xs font-bold">{senderInitial(message.from)}</span>
-          </div>
+          <SenderAvatar from={message.from} size="md" className="shadow-violet-500/15" />
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-semibold text-white/90 leading-snug mb-1">
               {message.subject || '(No subject)'}

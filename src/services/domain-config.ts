@@ -85,11 +85,14 @@ const DEFAULT_CONFIG: AdminConfig = {
   maxMailboxes: 5,
   maxMessages: 50,
   guestMode: true,
+  // ⚠️ Credentials are NOT stored in source code.
+  // Set them via the Admin Panel on first login, they persist in localStorage.
+  // First-time default: admin@servicehub-mail.cloud / admin (change immediately!)
   adminEmail: 'admin@servicehub-mail.cloud',
-  adminPassword: 'Fee2030@#',
-  createCode: 'SH2030',
-  serviceMailEmail: 'Inbox@servicehub-mail.cloud',
-  serviceMailPassword: 'Box2030!@#',
+  adminPassword: 'admin',
+  createCode: 'CHANGE_ME',
+  serviceMailEmail: 'inbox@servicehub-mail.cloud',
+  serviceMailPassword: 'admin',
 };
 
 function generateId(): string {
