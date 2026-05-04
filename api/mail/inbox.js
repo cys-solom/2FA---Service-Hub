@@ -19,18 +19,20 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing "address" query parameter' });
   }
 
-  // Validate: domain must be in the list of allowed domains
+  // Validate: domain must be in the list of allowed domains OR have custom headers
   const emailDomain = extractDomain(address);
   const allowed = getAllowedDomains();
-  if (!emailDomain || !allowed.includes(emailDomain)) {
+  const hasCustomHeaders = !!req.headers['x-imap-host'];
+
+  if (!emailDomain || (!hasCustomHeaders && !allowed.includes(emailDomain))) {
     return res.status(400).json({
-      error: 'Invalid email domain',
+      error: 'Invalid email domain or missing configuration',
       allowedDomains: allowed,
     });
   }
 
   try {
-    const messages = await fetchEmailsForAddress(address, 30);
+    const messages = await fetchEmailsForAddress(address, 30, req.headers);
     return res.status(200).json({ success: true, address, messages, count: messages.length });
   } catch (error) {
     console.error('IMAP inbox error:', error.message);

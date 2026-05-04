@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   if (!address) return res.status(400).json({ error: 'Missing "address" parameter' });
 
   try {
-    const count = await deleteMessagesForAddress(address);
+    const count = await deleteMessagesForAddress(address, req.headers);
     return res.status(200).json({ success: true, deleted: count, address });
   } catch (error) {
     console.error('Clear inbox error:', error.message);

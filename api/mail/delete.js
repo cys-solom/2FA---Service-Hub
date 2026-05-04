@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   if (isNaN(uidNum)) return res.status(400).json({ error: 'Invalid UID' });
 
   try {
-    await deleteMessageByUid(uidNum, domain || undefined);
+    await deleteMessageByUid(uidNum, domain || undefined, req.headers);
     return res.status(200).json({ success: true, deleted: uidNum });
   } catch (error) {
     console.error('Delete error:', error.message);

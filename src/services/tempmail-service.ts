@@ -9,7 +9,23 @@
  *   - Auto-cleanup: 30-day-old messages purged on each visit
  */
 
-import { getPrimaryDomain } from './domain-config';
+import { getPrimaryDomain, getAdminConfig } from './domain-config';
+
+// ─── Headers helper ────────────────────────────────────────────────
+function getImapHeaders(addressOrDomain: string): Record<string, string> {
+  const config = getAdminConfig();
+  const domainPart = addressOrDomain.includes('@') ? addressOrDomain.split('@')[1] : addressOrDomain;
+  const dConf = config.domains.find(d => d.domain.toLowerCase() === domainPart?.toLowerCase());
+  if (dConf && dConf.imapHost && dConf.imapUser && dConf.imapPassword) {
+    return {
+      'x-imap-host': dConf.imapHost,
+      'x-imap-port': String(dConf.imapPort || 993),
+      'x-imap-user': dConf.imapUser,
+      'x-imap-pass': dConf.imapPassword,
+    };
+  }
+  return {};
+}
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -76,7 +92,9 @@ let cachedMessages: Record<string, TempMessage[]> = {};
 
 async function fetchInboxFromAPI(address: string): Promise<TempMessage[]> {
   try {
-    const res = await fetch(`/api/mail/inbox?address=${encodeURIComponent(address)}`);
+    const res = await fetch(`/api/mail/inbox?address=${encodeURIComponent(address)}`, {
+      headers: getImapHeaders(address),
+    });
     if (!res.ok) return [];
     const data = await res.json();
     if (data.success && Array.isArray(data.messages)) {
@@ -104,7 +122,9 @@ async function fetchMessageFromAPI(uid: number, domain?: string): Promise<TempMe
   try {
     const params = new URLSearchParams({ uid: String(uid) });
     if (domain) params.set('domain', domain);
-    const res = await fetch(`/api/mail/message?${params.toString()}`);
+    const res = await fetch(`/api/mail/message?${params.toString()}`, {
+      headers: domain ? getImapHeaders(domain) : {},
+    });
     if (!res.ok) return null;
     const data = await res.json();
     if (data.success && data.message) {
@@ -132,7 +152,10 @@ async function deleteMessageFromAPI(uid: number, domain?: string): Promise<boole
   try {
     const params = new URLSearchParams({ uid: String(uid) });
     if (domain) params.set('domain', domain);
-    const res = await fetch(`/api/mail/delete?${params.toString()}`, { method: 'DELETE' });
+    const res = await fetch(`/api/mail/delete?${params.toString()}`, {
+      method: 'DELETE',
+      headers: domain ? getImapHeaders(domain) : {},
+    });
     const data = await res.json();
     return data.success === true;
   } catch {
@@ -142,7 +165,10 @@ async function deleteMessageFromAPI(uid: number, domain?: string): Promise<boole
 
 export async function clearInboxFromAPI(address: string): Promise<number> {
   try {
-    const res = await fetch(`/api/mail/clear?address=${encodeURIComponent(address)}`, { method: 'DELETE' });
+    const res = await fetch(`/api/mail/clear?address=${encodeURIComponent(address)}`, {
+      method: 'DELETE',
+      headers: getImapHeaders(address),
+    });
     const data = await res.json();
     return data.deleted || 0;
   } catch {

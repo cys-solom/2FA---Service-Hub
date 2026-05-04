@@ -116,24 +116,46 @@ function cleanupPool() {
 setInterval(cleanupPool, 15_000);
 
 /** Get or create a pooled IMAP connection for a domain */
-async function getPooledClient(domain) {
+async function getPooledClient(domain, reqHeaders) {
   const key = (domain || 'primary').toLowerCase();
-  const existing = connectionPool.get(key);
 
-  // Reuse existing connected client
-  if (existing && existing.client && !existing.client.closed) {
-    existing.lastUsed = Date.now();
-    return existing.client;
+  // If custom headers are provided, we don't pool to avoid credential leakage or staleness,
+  // OR we pool with a unique key based on credentials.
+  // For safety and simplicity, if custom headers are present, create a fresh connection.
+  const hasCustomAuth = reqHeaders && reqHeaders['x-imap-host'];
+
+  if (!hasCustomAuth) {
+    const existing = connectionPool.get(key);
+    // Reuse existing connected client
+    if (existing && existing.client && !existing.client.closed) {
+      existing.lastUsed = Date.now();
+      return existing.client;
+    }
+    // Clean up broken entry
+    if (existing) {
+      try { existing.client.logout(); } catch { /* ignore */ }
+      connectionPool.delete(key);
+    }
   }
 
-  // Clean up broken entry
-  if (existing) {
-    try { existing.client.logout(); } catch { /* ignore */ }
-    connectionPool.delete(key);
+  // Create new connection
+  let config;
+  if (hasCustomAuth) {
+    config = {
+      host: reqHeaders['x-imap-host'],
+      port: parseInt(reqHeaders['x-imap-port'] || '993', 10),
+      secure: true,
+      auth: {
+        user: reqHeaders['x-imap-user'],
+        pass: reqHeaders['x-imap-pass'],
+      },
+      tls: { rejectUnauthorized: false },
+      logger: false,
+    };
+  } else {
+    config = domain ? getImapFlowConfig(domain) : IMAP_CONFIG;
   }
 
-  // Create new connection with timeout
-  const config = domain ? getImapFlowConfig(domain) : IMAP_CONFIG;
   const client = new ImapFlow(config);
 
   const connectPromise = client.connect();
@@ -143,16 +165,17 @@ async function getPooledClient(domain) {
 
   await Promise.race([connectPromise, timeoutPromise]);
 
-  connectionPool.set(key, {
-    client,
-    lastUsed: Date.now(),
-    inUse: false,
-  });
-
-  // Auto-cleanup on connection close
-  client.on('close', () => {
-    connectionPool.delete(key);
-  });
+  if (!hasCustomAuth) {
+    connectionPool.set(key, {
+      client,
+      lastUsed: Date.now(),
+      inUse: false,
+    });
+    // Auto-cleanup on connection close
+    client.on('close', () => {
+      connectionPool.delete(key);
+    });
+  }
 
   return client;
 }
@@ -165,11 +188,11 @@ async function getPooledClient(domain) {
  * @param {Function} callback  — receives the ImapFlow client
  * @param {string}   [domain]  — optional domain to select the right IMAP server
  */
-async function withImap(callback, domain) {
+async function withImap(callback, domain, reqHeaders) {
   const key = (domain || 'primary').toLowerCase();
   let client;
   try {
-    client = await getPooledClient(domain);
+    client = await getPooledClient(domain, reqHeaders);
     const entry = connectionPool.get(key);
     if (entry) entry.inUse = true;
 
@@ -193,7 +216,7 @@ async function withImap(callback, domain) {
  * Fetches emails for a specific recipient address from INBOX.
  * Automatically connects to the correct IMAP server based on the email domain.
  */
-async function fetchEmailsForAddress(address, limit = 20) {
+async function fetchEmailsForAddress(address, limit = 20, reqHeaders) {
   const domain = extractDomain(address);
   return withImap(async (client) => {
     const lock = await client.getMailboxLock('INBOX');
@@ -244,14 +267,14 @@ async function fetchEmailsForAddress(address, limit = 20) {
     } finally {
       lock.release();
     }
-  }, domain);
+  }, domain, reqHeaders);
 }
 
 /**
  * Fetches a full email message by UID including body content.
  * Optionally provide the domain to connect to the correct server.
  */
-async function fetchMessageByUid(uid, domain) {
+async function fetchMessageByUid(uid, domain, reqHeaders) {
   return withImap(async (client) => {
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -320,14 +343,14 @@ async function fetchMessageByUid(uid, domain) {
     } finally {
       lock.release();
     }
-  }, domain);
+  }, domain, reqHeaders);
 }
 
 /**
  * Deletes a specific message by UID.
  * Optionally provide the domain to connect to the correct server.
  */
-async function deleteMessageByUid(uid, domain) {
+async function deleteMessageByUid(uid, domain, reqHeaders) {
   return withImap(async (client) => {
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -336,7 +359,7 @@ async function deleteMessageByUid(uid, domain) {
     } finally {
       lock.release();
     }
-  }, domain);
+  }, domain, reqHeaders);
 }
 
 /**
@@ -373,7 +396,7 @@ async function purgeAllMessages() {
 /**
  * Deletes ALL messages for a specific TO address.
  */
-async function deleteMessagesForAddress(address) {
+async function deleteMessagesForAddress(address, reqHeaders) {
   const domain = extractDomain(address);
   return withImap(async (client) => {
     const lock = await client.getMailboxLock('INBOX');
@@ -395,7 +418,7 @@ async function deleteMessagesForAddress(address) {
     } finally {
       lock.release();
     }
-  }, domain);
+  }, domain, reqHeaders);
 }
 
 /**
