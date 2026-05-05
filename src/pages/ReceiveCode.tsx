@@ -33,8 +33,8 @@ const SAVED_PREFIX_KEY = 'servicehub_quick_prefix';
 function ReceiveCodePage() {
   const { address: urlAddress } = useParams<{ address?: string }>();
   const navigate = useNavigate();
-  const [username, setUsername] = useState(() => {
-    // Pre-fill with saved prefix if no URL address
+  const [username, setUsername] = useState('');
+  const [savedPrefix, setSavedPrefix] = useState(() => {
     try { return localStorage.getItem(SAVED_PREFIX_KEY) || ''; } catch { return ''; }
   });
   const [selectedDomain, setSelectedDomain] = useState('');
@@ -445,17 +445,46 @@ function ReceiveCodePage() {
               </div>
             )}
 
+            {/* ── Fixed Prefix for Quick Random ──── */}
+            <div className="mt-3 flex items-center gap-2">
+              <div className="flex-1 flex items-stretch rounded-xl bg-white/[0.02] border border-white/[0.06] focus-within:border-cyan-500/25 transition-all overflow-hidden">
+                <div className="flex items-center pl-3 pr-1.5 gap-1.5 border-r border-white/[0.06]">
+                  <svg className="w-3 h-3 text-cyan-400/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <span className="text-[9px] text-cyan-400/40 font-semibold uppercase tracking-wider whitespace-nowrap select-none">Prefix</span>
+                </div>
+                <input
+                  type="text"
+                  value={savedPrefix}
+                  onChange={e => {
+                    const val = e.target.value.replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase().slice(0, 20);
+                    setSavedPrefix(val);
+                    try { localStorage.setItem(SAVED_PREFIX_KEY, val); } catch {}
+                  }}
+                  placeholder="e.g. ahmed"
+                  className="flex-1 bg-transparent text-xs text-cyan-200/80 placeholder-white/15 py-2.5 px-3 outline-none font-mono"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                {savedPrefix && (
+                  <div className="flex items-center pr-2 animate-fade-in">
+                    <span className="text-[10px] text-white/15 font-mono">.xxxxx</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Action Buttons ──── */}
             <div className="flex gap-2 mt-3">
               {/* Quick Random Email */}
               <button
                 onClick={() => {
-                  const base = username.trim().replace(/[^a-zA-Z0-9._-]/g, '').replace(/\..*$/, '').toLowerCase();
+                  const base = savedPrefix.trim().replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase();
                   if (!base) {
-                    setEmailError('اكتب كلمة الأول في الخانة وبعدين اضغط Quick Random');
+                    setEmailError('اكتب البريفكس (البداية) في خانة Prefix وبعدين اضغط Quick Random');
                     return;
                   }
-                  // Save the base word for next time
-                  try { localStorage.setItem(SAVED_PREFIX_KEY, base); } catch {}
                   const alphaNum = 'abcdefghijklmnopqrstuvwxyz0123456789';
                   const suffix = Array.from({ length: 5 }, () => alphaNum[Math.floor(Math.random() * alphaNum.length)]).join('');
                   const prefix = `${base}.${suffix}`;
@@ -469,7 +498,7 @@ function ReceiveCodePage() {
                 className="flex-1 min-h-[44px] py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 text-cyan-300/70 active:bg-cyan-500/25 active:text-cyan-200 hover:from-cyan-500/15 hover:to-blue-500/15 hover:text-cyan-300 hover:border-cyan-500/30 text-xs font-semibold transition-all flex items-center justify-center gap-2 touch-manipulation disabled:opacity-40"
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 Quick Random
               </button>
@@ -482,6 +511,27 @@ function ReceiveCodePage() {
                 Copy
               </button>
             </div>
+
+            {/* ── Copy Direct Link Button ──── */}
+            {activeEmail && (
+              <button
+                onClick={async () => {
+                  const url = `${window.location.origin}/receive-code/${encodeURIComponent(activeEmail)}`;
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    addToast('تم نسخ لينك الدخول المباشر ✓', 'success');
+                  } catch {
+                    addToast('فشل نسخ الرابط', 'error');
+                  }
+                }}
+                className="w-full mt-2 min-h-[40px] py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500/8 to-teal-500/8 border border-emerald-500/15 text-emerald-300/70 active:bg-emerald-500/20 active:text-emerald-200 hover:from-emerald-500/12 hover:to-teal-500/12 hover:text-emerald-300 hover:border-emerald-500/25 text-xs font-semibold transition-all flex items-center justify-center gap-2 touch-manipulation animate-fade-in"
+              >
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                نسخ لينك الدخول المباشر
+              </button>
+            )}
 
             {emailError && (
               <p className="text-red-400/80 text-xs mt-2 flex items-center gap-1.5 animate-fade-in">
