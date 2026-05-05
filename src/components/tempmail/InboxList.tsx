@@ -68,7 +68,7 @@ const InboxList: React.FC<InboxListProps> = ({ messages, selectedId, onSelect })
   return (
     <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
       {messages.map((msg, i) => {
-        const otp = extractOTP(msg.subject, msg.snippet);
+        const otp = extractOTP(msg.subject, msg.textBody || msg.snippet);
         const category = classifyEmail(msg.from, msg.subject);
         const catInfo = CATEGORIES[category];
 

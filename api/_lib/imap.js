@@ -234,12 +234,14 @@ async function fetchEmailsForAddress(address, limit = 20, reqHeaders) {
       const recentSeqs = seqNumbers.slice(-limit);
 
       // Fetch all matching messages in one call using sequence range
+      // Include source so we can extract body snippets for OTP detection
       const range = recentSeqs.join(',');
       for await (const msg of client.fetch(range, {
         uid: true,
         envelope: true,
         flags: true,
         size: true,
+        source: true,
       })) {
         if (msg && msg.envelope) {
           // Filter: only include if TO matches our address
@@ -248,6 +250,28 @@ async function fetchEmailsForAddress(address, limit = 20, reqHeaders) {
             t => t.address && t.address.toLowerCase() === address.toLowerCase()
           );
           if (!matchesTo) continue;
+
+          // Extract a body snippet for OTP detection
+          let bodySnippet = '';
+          if (msg.source) {
+            try {
+              const parsed = await simpleParser(msg.source);
+              // Get text or stripped HTML, limit to 2000 chars for efficiency
+              if (parsed.text) {
+                bodySnippet = parsed.text.slice(0, 2000);
+              } else if (parsed.html) {
+                bodySnippet = parsed.html
+                  .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                  .replace(/<[^>]+>/g, ' ')
+                  .replace(/&nbsp;/gi, ' ')
+                  .replace(/&amp;/gi, '&')
+                  .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+                  .replace(/\s+/g, ' ')
+                  .trim()
+                  .slice(0, 2000);
+              }
+            } catch { /* parse error — skip snippet */ }
+          }
 
           messages.push({
             uid: msg.uid,
@@ -259,6 +283,7 @@ async function fetchEmailsForAddress(address, limit = 20, reqHeaders) {
             date: msg.envelope.date ? new Date(msg.envelope.date).getTime() : Date.now(),
             isRead: msg.flags ? msg.flags.has('\\Seen') : false,
             size: msg.size || 0,
+            bodySnippet,
           });
         }
       }
