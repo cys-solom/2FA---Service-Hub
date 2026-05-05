@@ -47,27 +47,10 @@ const STORAGE_KEY = 'servicehub_admin_config';
 const DEFAULT_CONFIG: AdminConfig = {
   domains: [
     {
-      id: 'default',
-      domain: 'servicehub-mail.cloud',
-      isActive: true,
-      isPrimary: true,
-      createdAt: Date.now(),
-      imapHost: 'mail.servicehub-mail.cloud',
-      imapPort: 993,
-      imapUser: 'inbox@servicehub-mail.cloud',
-      imapPassword: 'Text2030@',
-      imapTls: true,
-      smtpHost: 'mail.servicehub-mail.cloud',
-      smtpPort: 587,
-      smtpUser: 'inbox@servicehub-mail.cloud',
-      smtpPassword: 'Text2030@',
-      smtpTls: true,
-    },
-    {
       id: 'gpt-domain',
       domain: 'gpt-servicehub.cloud',
       isActive: true,
-      isPrimary: false,
+      isPrimary: true,
       createdAt: Date.now(),
       imapHost: 'mail.gpt-servicehub.cloud',
       imapPort: 993,
@@ -77,6 +60,23 @@ const DEFAULT_CONFIG: AdminConfig = {
       smtpHost: 'mail.gpt-servicehub.cloud',
       smtpPort: 587,
       smtpUser: 'inbox@gpt-servicehub.cloud',
+      smtpPassword: 'Text2030@',
+      smtpTls: true,
+    },
+    {
+      id: 'default',
+      domain: 'servicehub-mail.cloud',
+      isActive: true,
+      isPrimary: false,
+      createdAt: Date.now(),
+      imapHost: 'mail.servicehub-mail.cloud',
+      imapPort: 993,
+      imapUser: 'inbox@servicehub-mail.cloud',
+      imapPassword: 'Text2030@',
+      imapTls: true,
+      smtpHost: 'mail.servicehub-mail.cloud',
+      smtpPort: 587,
+      smtpUser: 'inbox@servicehub-mail.cloud',
       smtpPassword: 'Text2030@',
       smtpTls: true,
     },
@@ -172,7 +172,7 @@ export function getPrimaryDomain(): string {
   if (primary) return primary.domain;
   const firstActive = config.domains.find(d => d.isActive);
   if (firstActive) return firstActive.domain;
-  return 'servicehub-mail.cloud';
+  return 'gpt-servicehub.cloud';
 }
 
 export function getActiveDomains(): DomainConfig[] {

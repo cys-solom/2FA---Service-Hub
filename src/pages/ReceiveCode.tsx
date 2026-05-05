@@ -25,7 +25,7 @@ import {
   getUnreadCount,
   deleteMessage,
 } from '../services/tempmail-service';
-import { getActiveDomains } from '../services/domain-config';
+import { getActiveDomains, getPrimaryDomain } from '../services/domain-config';
 import { playNotificationSound, updateTabBadge } from '../utils/email-utils';
 
 function ReceiveCodePage() {
@@ -52,10 +52,11 @@ function ReceiveCodePage() {
 
   const activeDomains = getActiveDomains().map(d => d.domain);
 
-  // Initialize selectedDomain with primary domain
+  // Initialize selectedDomain with primary domain (gpt-servicehub.cloud)
   useEffect(() => {
     if (!selectedDomain && activeDomains.length > 0) {
-      setSelectedDomain(activeDomains[0]);
+      const primary = getPrimaryDomain();
+      setSelectedDomain(activeDomains.includes(primary) ? primary : activeDomains[0]);
     }
   }, [activeDomains, selectedDomain]);
 
@@ -440,6 +441,32 @@ function ReceiveCodePage() {
             )}
 
             <div className="flex gap-2 mt-3">
+              {/* Quick Random Email */}
+              <button
+                onClick={() => {
+                  const words = [
+                    'ahmed','omar','sara','nour','ali','mohamed','youssef','khaled',
+                    'mona','layla','rami','tamer','dina','hana','ziad','kareem',
+                    'inbox','mail','user','client','info','hello','contact','test',
+                    'dev','admin','support','verify','code','sign','login','join',
+                  ];
+                  const alphaNum = 'abcdefghijklmnopqrstuvwxyz0123456789';
+                  const word = words[Math.floor(Math.random() * words.length)];
+                  const suffix = Array.from({ length: 5 }, () => alphaNum[Math.floor(Math.random() * alphaNum.length)]).join('');
+                  const prefix = `${word}.${suffix}`;
+                  const domain = selectedDomain || getPrimaryDomain();
+                  setUsername(prefix);
+                  setSelectedDomain(domain);
+                  loadInbox(`${prefix}@${domain}`);
+                }}
+                disabled={isLoading}
+                className="flex-1 min-h-[44px] py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 text-cyan-300/70 active:bg-cyan-500/25 active:text-cyan-200 hover:from-cyan-500/15 hover:to-blue-500/15 hover:text-cyan-300 hover:border-cyan-500/30 text-xs font-semibold transition-all flex items-center justify-center gap-2 touch-manipulation disabled:opacity-40"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Quick Random
+              </button>
               <button onClick={handlePaste} className="flex-1 min-h-[44px] py-2 px-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white/40 active:bg-white/15 active:text-white hover:bg-white/[0.06] hover:text-white/60 text-xs font-medium transition-all flex items-center justify-center gap-2 touch-manipulation">
                 <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                 Paste
