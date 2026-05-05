@@ -54,6 +54,29 @@ function ReceiveCodePage() {
   const pasteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevMsgCountRef = useRef(0);
+  const fetchedBodyUids = useRef<Set<number>>(new Set());
+
+  // Auto-fetch full message bodies for OTP detection in inbox list
+  const enrichMessages = useCallback(async (msgs: TempMessage[], mbId: string): Promise<TempMessage[]> => {
+    const toFetch = msgs.filter(m => m.uid && !fetchedBodyUids.current.has(m.uid) && (!m.textBody || m.textBody.length < 30));
+    if (toFetch.length === 0) return msgs;
+    const enriched = [...msgs];
+    let changed = false;
+    for (const msg of toFetch) {
+      fetchedBodyUids.current.add(msg.uid!);
+      try {
+        const full = await getFullMessage(msg.uid!, mbId);
+        if (full && (full.textBody || full.htmlBody)) {
+          const idx = enriched.findIndex(m => m.uid === msg.uid);
+          if (idx !== -1) {
+            enriched[idx] = { ...enriched[idx], textBody: full.textBody, htmlBody: full.htmlBody };
+            changed = true;
+          }
+        }
+      } catch { /* silent */ }
+    }
+    return changed ? enriched : msgs;
+  }, []);
 
   const activeDomains = getActiveDomains().map(d => d.domain);
 
@@ -123,9 +146,14 @@ function ReceiveCodePage() {
 
     if (mb) {
       setMailboxId(mb.id);
+      fetchedBodyUids.current.clear();
       const msgs = await refreshInbox(mb.id);
       setMessages(msgs);
       setUnreadCount(getUnreadCount(mb.id));
+      // Auto-fetch bodies for OTP detection
+      enrichMessages(msgs, mb.id).then(enriched => {
+        if (enriched !== msgs) setMessages(enriched);
+      });
     }
     setIsLoading(false);
   }, [selectedDomain, activeDomains, navigate]);
@@ -154,6 +182,10 @@ function ReceiveCodePage() {
         }
         prevMsgCountRef.current = msgs.length;
         setMessages(msgs);
+        // Auto-fetch bodies for OTP detection
+        enrichMessages(msgs, mailboxId).then(enriched => {
+          if (enriched !== msgs) setMessages(enriched);
+        });
         const unread = getUnreadCount(mailboxId);
         setUnreadCount(unread);
         updateTabBadge(unread);
@@ -185,6 +217,10 @@ function ReceiveCodePage() {
           }
           prevMsgCountRef.current = msgs.length;
           setMessages(msgs);
+          // Auto-fetch bodies for OTP detection
+          enrichMessages(msgs, mailboxId).then(enriched => {
+            if (enriched !== msgs) setMessages(enriched);
+          });
           const unread = getUnreadCount(mailboxId);
           setUnreadCount(unread);
           updateTabBadge(unread);
@@ -266,6 +302,10 @@ function ReceiveCodePage() {
       const msgs = await refreshInbox(mailboxId);
       setMessages(msgs);
       setUnreadCount(getUnreadCount(mailboxId));
+      // Auto-fetch bodies for OTP detection
+      enrichMessages(msgs, mailboxId).then(enriched => {
+        if (enriched !== msgs) setMessages(enriched);
+      });
     } catch {
       addToast('Failed to refresh', 'error');
     }
