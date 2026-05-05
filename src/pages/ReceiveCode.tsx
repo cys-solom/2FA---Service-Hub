@@ -444,19 +444,18 @@ function ReceiveCodePage() {
               {/* Quick Random Email */}
               <button
                 onClick={() => {
-                  const words = [
-                    'ahmed','omar','sara','nour','ali','mohamed','youssef','khaled',
-                    'mona','layla','rami','tamer','dina','hana','ziad','kareem',
-                    'inbox','mail','user','client','info','hello','contact','test',
-                    'dev','admin','support','verify','code','sign','login','join',
-                  ];
+                  const base = username.trim().replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase();
+                  if (!base) {
+                    setEmailError('اكتب كلمة الأول في الخانة وبعدين اضغط Quick Random');
+                    return;
+                  }
                   const alphaNum = 'abcdefghijklmnopqrstuvwxyz0123456789';
-                  const word = words[Math.floor(Math.random() * words.length)];
                   const suffix = Array.from({ length: 5 }, () => alphaNum[Math.floor(Math.random() * alphaNum.length)]).join('');
-                  const prefix = `${word}.${suffix}`;
+                  const prefix = `${base}.${suffix}`;
                   const domain = selectedDomain || getPrimaryDomain();
                   setUsername(prefix);
                   setSelectedDomain(domain);
+                  setEmailError(null);
                   loadInbox(`${prefix}@${domain}`);
                 }}
                 disabled={isLoading}
