@@ -55,12 +55,12 @@ const DEFAULT_CONFIG: AdminConfig = {
       imapHost: 'mail.servicehub-mail.cloud',
       imapPort: 993,
       imapUser: 'inbox@servicehub-mail.cloud',
-      imapPassword: '',
+      imapPassword: 'Text2030@',
       imapTls: true,
       smtpHost: 'mail.servicehub-mail.cloud',
       smtpPort: 587,
       smtpUser: 'inbox@servicehub-mail.cloud',
-      smtpPassword: '',
+      smtpPassword: 'Text2030@',
       smtpTls: true,
     },
     {
@@ -72,12 +72,12 @@ const DEFAULT_CONFIG: AdminConfig = {
       imapHost: 'mail.gpt-servicehub.cloud',
       imapPort: 993,
       imapUser: 'inbox@gpt-servicehub.cloud',
-      imapPassword: '',
+      imapPassword: 'Text2030@',
       imapTls: true,
       smtpHost: 'mail.gpt-servicehub.cloud',
       smtpPort: 587,
       smtpUser: 'inbox@gpt-servicehub.cloud',
-      smtpPassword: '',
+      smtpPassword: 'Text2030@',
       smtpTls: true,
     },
   ],
@@ -85,14 +85,11 @@ const DEFAULT_CONFIG: AdminConfig = {
   maxMailboxes: 5,
   maxMessages: 50,
   guestMode: true,
-  // ⚠️ Credentials are NOT stored in source code.
-  // Set them via the Admin Panel on first login, they persist in localStorage.
-  // First-time default: admin@servicehub-mail.cloud / admin (change immediately!)
   adminEmail: 'admin@servicehub-mail.cloud',
-  adminPassword: 'admin',
-  createCode: 'CHANGE_ME',
-  serviceMailEmail: 'inbox@servicehub-mail.cloud',
-  serviceMailPassword: 'admin',
+  adminPassword: 'Fee2030@#',
+  createCode: 'SH2030',
+  serviceMailEmail: 'Inbox@servicehub-mail.cloud',
+  serviceMailPassword: 'Box2030!@#',
 };
 
 function generateId(): string {
@@ -137,6 +134,22 @@ export function getAdminConfig(): AdminConfig {
         parsed.serviceMailEmail = DEFAULT_CONFIG.serviceMailEmail;
         parsed.serviceMailPassword = DEFAULT_CONFIG.serviceMailPassword;
         needsSave = true;
+      }
+      // Migrate: fill in empty IMAP/SMTP passwords from defaults
+      for (const d of parsed.domains) {
+        const defaultDomain = DEFAULT_CONFIG.domains.find(
+          dd => dd.domain.toLowerCase() === d.domain.toLowerCase()
+        );
+        if (defaultDomain) {
+          if (!d.imapPassword && defaultDomain.imapPassword) {
+            d.imapPassword = defaultDomain.imapPassword;
+            needsSave = true;
+          }
+          if (!d.smtpPassword && defaultDomain.smtpPassword) {
+            d.smtpPassword = defaultDomain.smtpPassword;
+            needsSave = true;
+          }
+        }
       }
       if (needsSave) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
