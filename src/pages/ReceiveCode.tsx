@@ -28,10 +28,15 @@ import {
 import { getActiveDomains, getPrimaryDomain } from '../services/domain-config';
 import { playNotificationSound, updateTabBadge } from '../utils/email-utils';
 
+const SAVED_PREFIX_KEY = 'servicehub_quick_prefix';
+
 function ReceiveCodePage() {
   const { address: urlAddress } = useParams<{ address?: string }>();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(() => {
+    // Pre-fill with saved prefix if no URL address
+    try { return localStorage.getItem(SAVED_PREFIX_KEY) || ''; } catch { return ''; }
+  });
   const [selectedDomain, setSelectedDomain] = useState('');
   const [activeEmail, setActiveEmail] = useState<string | null>(null);
   const [mailboxId, setMailboxId] = useState<string | null>(null);
@@ -444,11 +449,13 @@ function ReceiveCodePage() {
               {/* Quick Random Email */}
               <button
                 onClick={() => {
-                  const base = username.trim().replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase();
+                  const base = username.trim().replace(/[^a-zA-Z0-9._-]/g, '').replace(/\..*$/, '').toLowerCase();
                   if (!base) {
                     setEmailError('اكتب كلمة الأول في الخانة وبعدين اضغط Quick Random');
                     return;
                   }
+                  // Save the base word for next time
+                  try { localStorage.setItem(SAVED_PREFIX_KEY, base); } catch {}
                   const alphaNum = 'abcdefghijklmnopqrstuvwxyz0123456789';
                   const suffix = Array.from({ length: 5 }, () => alphaNum[Math.floor(Math.random() * alphaNum.length)]).join('');
                   const prefix = `${base}.${suffix}`;
